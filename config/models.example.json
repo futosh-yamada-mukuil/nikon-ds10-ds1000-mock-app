@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "detection": {
+    "path": "models/nikon-detection-for-classificationv2.pt",
+    "sha256": "b7a6beaacdf36f44efbe2c42afa4d9ad686fc08d8e03a299b5f294675513da04"
+  },
+  "classification": {
+    "path": "models/best_resnet101_model_by_valacc.pth",
+    "sha256": "abad46a8728ad29b3e05b377916b842e059fad42151e2bddb8871b1db7edfe4c"
+  }
+}

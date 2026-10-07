@@ -1,0 +1,13 @@
+{
+  "enabled": false,
+  "validated_unattended": false,
+  "timezone": "Asia/Tokyo",
+  "time_window": ["00:00", "04:00"],
+  "model": "gpt-6-luna",
+  "effort": "low",
+  "start_remaining_percent": 85,
+  "stop_remaining_percent": 80,
+  "freshness_seconds": 120,
+  "max_tasks": 3,
+  "tasks": []
+}

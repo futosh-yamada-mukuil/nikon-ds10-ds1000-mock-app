@@ -1,0 +1,9 @@
+# Python 3.12. Install torch/torchvision with the platform-specific setup script first.
+# These versions match the locally verified Apple Silicon inference environment.
+PySide6==6.11.2
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+Pillow==12.3.0
+rfdetr==1.5.0
+transformers==4.57.6
+supervision==0.21.0
