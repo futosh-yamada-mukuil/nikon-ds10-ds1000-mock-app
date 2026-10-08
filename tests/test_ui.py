@@ -105,6 +105,21 @@ class UserFlowTests(unittest.TestCase):
         self.assertIn("—", self.window.summary.text())
         self.assertFalse(self.window.start_button.isEnabled())
 
+    def test_ds1000_improvement_is_opt_in_and_resets_when_machine_changes(self):
+        engine = FakeEngine()
+        engine.calibration = {"machines": {"DS1000": {"detection_threshold": .5, "classification_threshold": 60.}}}
+        self.prepare(engine)
+        self.assertEqual(self.window.current_settings().classification_threshold, .5)
+        self.assertFalse(self.window.calibration_button.isEnabled())
+        self.window.machine.setCurrentText("DS1000")
+        self.assertTrue(self.window.calibration_button.isEnabled())
+        self.window.calibration_button.click()
+        self.assertTrue(self.window.current_settings().use_calibration)
+        self.assertEqual(self.window.current_settings().classification_threshold, 60.)
+        self.window.machine.setCurrentText("DS10")
+        self.assertFalse(self.window.current_settings().use_calibration)
+        self.assertEqual(self.window.current_settings().classification_threshold, .5)
+
     def test_image_run_snapshots_settings_and_disables_mutating_controls(self):
         engine = FakeEngine(block=True)
         self.prepare(engine)

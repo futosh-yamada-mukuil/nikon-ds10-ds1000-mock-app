@@ -3,7 +3,7 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
   "version": 1,
-  "serialNumber": "urn:uuid:6effe6b6-7e9d-530e-b82f-dacdd74b14d5",
+  "serialNumber": "urn:uuid:de5a3fd9-2f4d-5fa0-9bb4-bffe7137d1e9",
   "metadata": {
     "tools": [
       {
@@ -50,6 +50,27 @@
     ]
   },
   "components": [
+    {
+      "type": "file",
+      "bom-ref": "file:model:classification-calibration:cell-calibration.local.json:43c3489c9c1b5d7a654d36c4d022e67f7568f64d68fc15a23ec9e15aa5acc01f",
+      "name": "cell-calibration.local.json",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "43c3489c9c1b5d7a654d36c4d022e67f7568f64d68fc15a23ec9e15aa5acc01f"
+        }
+      ],
+      "properties": [
+        {
+          "name": "nikon:file-role",
+          "value": "model:classification-calibration"
+        },
+        {
+          "name": "nikon:license-status",
+          "value": "unconfirmed"
+        }
+      ]
+    },
     {
       "type": "file",
       "bom-ref": "file:model:classification:best_resnet101_model_by_valacc.pth:abad46a8728ad29b3e05b377916b842e059fad42151e2bddb8871b1db7edfe4c",
@@ -115,6 +136,27 @@
     },
     {
       "type": "file",
+      "bom-ref": "file:source:calibration.py:16843a051e842cc8b7cd2975611bab93047ce2c7b4add65021eab08ce9b05058",
+      "name": "calibration.py",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "16843a051e842cc8b7cd2975611bab93047ce2c7b4add65021eab08ce9b05058"
+        }
+      ],
+      "properties": [
+        {
+          "name": "nikon:file-role",
+          "value": "source"
+        },
+        {
+          "name": "nikon:license-status",
+          "value": "unconfirmed"
+        }
+      ]
+    },
+    {
+      "type": "file",
       "bom-ref": "file:source:codex_rpc.py:3aa8b72a720b962bcd4c7a2341fbcae77c805bdd3130b9e11e378daf4daca8b2",
       "name": "codex_rpc.py",
       "hashes": [
@@ -136,12 +178,12 @@
     },
     {
       "type": "file",
-      "bom-ref": "file:source:compare_preprocessing.py:9b1e3455ba003ce8f3174e6e229a7701b64f235a08fe7ad407f2fe9615b2c1fb",
+      "bom-ref": "file:source:compare_preprocessing.py:c317faf966b593a71b55ffb2d5eda3115b857809c8800f47b5a0ec82fcb704dd",
       "name": "compare_preprocessing.py",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "9b1e3455ba003ce8f3174e6e229a7701b64f235a08fe7ad407f2fe9615b2c1fb"
+          "content": "c317faf966b593a71b55ffb2d5eda3115b857809c8800f47b5a0ec82fcb704dd"
         }
       ],
       "properties": [
@@ -157,12 +199,12 @@
     },
     {
       "type": "file",
-      "bom-ref": "file:source:domain.py:d46aff05d3eb222e25d7c783347ee202f6d5c1ca410a81493e3142587ef40a4e",
+      "bom-ref": "file:source:domain.py:5355abaafbf063f7fea776d6866099458ebef0e596063151534253a8a4f5af59",
       "name": "domain.py",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "d46aff05d3eb222e25d7c783347ee202f6d5c1ca410a81493e3142587ef40a4e"
+          "content": "5355abaafbf063f7fea776d6866099458ebef0e596063151534253a8a4f5af59"
         }
       ],
       "properties": [
@@ -199,12 +241,33 @@
     },
     {
       "type": "file",
-      "bom-ref": "file:source:inference.py:0083965550bdbf3ad4dbdf5b7ea4609367810e0c1ae874b473016af4b3f4a492",
+      "bom-ref": "file:source:evaluate_annotations.py:4f379cd1c66f52afce8cb6416451da0015d68bc83de4b0c857241e30b71f2852",
+      "name": "evaluate_annotations.py",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4f379cd1c66f52afce8cb6416451da0015d68bc83de4b0c857241e30b71f2852"
+        }
+      ],
+      "properties": [
+        {
+          "name": "nikon:file-role",
+          "value": "source"
+        },
+        {
+          "name": "nikon:license-status",
+          "value": "unconfirmed"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:source:inference.py:552beabe5572b8baef521fc6c6c54ab90bbcf5ecfb8cf2ff280382665a897acc",
       "name": "inference.py",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "0083965550bdbf3ad4dbdf5b7ea4609367810e0c1ae874b473016af4b3f4a492"
+          "content": "552beabe5572b8baef521fc6c6c54ab90bbcf5ecfb8cf2ff280382665a897acc"
         }
       ],
       "properties": [
@@ -283,12 +346,12 @@
     },
     {
       "type": "file",
-      "bom-ref": "file:source:reporting.py:29e1c7175c60fac5a8529a98905a37c961bdc4c8eb01cf7778ceb7a13b48963f",
+      "bom-ref": "file:source:reporting.py:94477068138d49d331b1fc3f5cf2fe6eb53c29d74fdcf687760978a475a0cc49",
       "name": "reporting.py",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "29e1c7175c60fac5a8529a98905a37c961bdc4c8eb01cf7778ceb7a13b48963f"
+          "content": "94477068138d49d331b1fc3f5cf2fe6eb53c29d74fdcf687760978a475a0cc49"
         }
       ],
       "properties": [
@@ -304,12 +367,33 @@
     },
     {
       "type": "file",
-      "bom-ref": "file:source:ui.py:07ae97566f9600f55244916cda926af507182c7d5263dd34a435dd7d948db430",
+      "bom-ref": "file:source:train_cell_calibration.py:e98e07b72aed8c259c5a7d1ef95afa745bb95e8949337ae8ca3e7d8400a0040d",
+      "name": "train_cell_calibration.py",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e98e07b72aed8c259c5a7d1ef95afa745bb95e8949337ae8ca3e7d8400a0040d"
+        }
+      ],
+      "properties": [
+        {
+          "name": "nikon:file-role",
+          "value": "source"
+        },
+        {
+          "name": "nikon:license-status",
+          "value": "unconfirmed"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:source:ui.py:5aed0f654d4ef0fc660aefb571789c99dc0989af8af9effd76bc9b2fd113e51c",
       "name": "ui.py",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "07ae97566f9600f55244916cda926af507182c7d5263dd34a435dd7d948db430"
+          "content": "5aed0f654d4ef0fc660aefb571789c99dc0989af8af9effd76bc9b2fd113e51c"
         }
       ],
       "properties": [
@@ -346,12 +430,12 @@
     },
     {
       "type": "file",
-      "bom-ref": "file:source:workers.py:01f711f038e37b901986c9ad75bc5dcce9db9ef6fe587e5471a4ededf261a2ef",
+      "bom-ref": "file:source:workers.py:eb47dc30c7f06f45f98caf312a3ee1b9d9ba492d00c76e589006e21e89fbbb43",
       "name": "workers.py",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "01f711f038e37b901986c9ad75bc5dcce9db9ef6fe587e5471a4ededf261a2ef"
+          "content": "eb47dc30c7f06f45f98caf312a3ee1b9d9ba492d00c76e589006e21e89fbbb43"
         }
       ],
       "properties": [

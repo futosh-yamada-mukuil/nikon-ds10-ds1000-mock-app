@@ -12,16 +12,17 @@ class ModelWorker(QThread):
     failed = Signal(str)
     message = Signal(str)
 
-    def __init__(self, detector, classifier, device, parent=None):
+    def __init__(self, detector, classifier, device, parent=None, calibration_path=None):
         super().__init__(parent)
         self.paths = detector, classifier
         self.device = device
+        self.calibration_path = calibration_path
 
     def run(self):
         try:
             from .inference import Engine
 
-            engine = Engine(*self.paths, device=self.device, log=self.message.emit)
+            engine = Engine(*self.paths, device=self.device, log=self.message.emit, calibration_path=self.calibration_path)
             engine.load()
             self.ready.emit(engine)
         except Exception:

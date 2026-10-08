@@ -170,7 +170,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_model_worker_emits_real_engine_success_or_explicit_load_failure(self):
         class FakeModelEngine:
-            def __init__(self, *args, device, log):
+            def __init__(self, *args, device, log, calibration_path=None):
                 self.loaded = False
                 self.log = log
 

@@ -14,6 +14,7 @@ class InferenceSettings:
     classification_threshold: float = 0.5
     machine: str = "DS10"
     mode: str = "detection_classification"
+    use_calibration: bool = False
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.detection_threshold) or not 0 <= self.detection_threshold <= 1:
@@ -24,6 +25,9 @@ class InferenceSettings:
             raise ValueError("機種はDS10またはDS1000を指定してください。")
         if self.mode not in MODES:
             raise ValueError(f"対応していない解析モードです: {self.mode}")
+        if type(self.use_calibration) is not bool or (self.use_calibration and
+                (self.machine != "DS1000" or self.mode != "detection_classification")):
+            raise ValueError("分類補正はDS1000の物体検知＋細胞分類でのみ使用できます。")
 
 
 @dataclass(frozen=True)

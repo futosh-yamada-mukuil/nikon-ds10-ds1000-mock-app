@@ -24,6 +24,7 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 from PIL import Image
 
 from .domain import CellResult, FrameResult, InferenceSettings
+from .calibration import CALIBRATION_SHA256
 
 
 DETECTOR_SHA256 = "b7a6beaacdf36f44efbe2c42afa4d9ad686fc08d8e03a299b5f294675513da04"
@@ -119,7 +120,7 @@ def crop_and_resize(image: Image.Image, box) -> tuple[Image.Image | None, tuple[
 
 class Engine:
     def __init__(self, detector_path: Path, classifier_path: Path, device: str = "auto",
-                 log: Callable[[str], None] | None = None) -> None:
+                 log: Callable[[str], None] | None = None, calibration_path: Path | None = None) -> None:
         self.detector_path = Path(detector_path).expanduser().resolve()
         self.classifier_path = Path(classifier_path).expanduser().resolve()
         self.requested_device = device
@@ -130,6 +131,8 @@ class Engine:
         self._classifier = None
         self._transform = None
         self._hashes: dict[str, str] = {}
+        self.calibration_path = calibration_path
+        self.calibration = None
 
     def load(self) -> None:
         if self.loaded:
@@ -166,6 +169,13 @@ class Engine:
                 transforms.ToTensor(), transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
             ])
             self.loaded = True
+            if self.calibration_path and self.calibration_path.is_file():
+                from .calibration import load_calibration
+                try:
+                    self.calibration = load_calibration(self.calibration_path, self._hashes["detector"], self._hashes["classifier"])
+                    self.log("DS1000の分類補正を検証しました（適用は改善設定ボタンから）。")
+                except (ValueError, KeyError, TypeError, OSError) as exc:
+                    self.log(f"分類補正は使用できません。標準モデルを使用します: {exc}")
             self.log(f"モデル読み込み完了 ({self.device})。")
         except Exception as exc:
             self.close()
@@ -184,6 +194,28 @@ class Engine:
             score = float(torch.softmax(output, dim=-1)[0, 1].item() * 100.0)
         if not math.isfinite(score) or not 0 <= score <= 100:
             raise ModelError("分類モデルから不正なスコアが返されました。")
+        return score
+
+    def _classify_calibrated(self, image: Image.Image, machine: str) -> float:
+        import numpy as np
+        import torch
+        from .calibration import score_features
+
+        if not self.calibration or machine not in self.calibration["machines"]:
+            raise ModelError("この機種の検証済み分類補正がありません。")
+        captured = []
+        hook = self._classifier.fc[5].register_forward_pre_hook(
+            lambda module, inputs: captured.append(inputs[0].detach().cpu().numpy()))
+        try:
+            with torch.no_grad():
+                self._classifier(self._transform(image).unsqueeze(0).to(self.device))
+        finally:
+            hook.remove()
+        if len(captured) != 1 or captured[0].shape != (1, 128) or not np.isfinite(captured[0]).all():
+            raise ModelError("分類補正の特徴量が不正です。")
+        score = float(score_features(captured[0], self.calibration["machines"][machine])[0])
+        if not math.isfinite(score) or not 0 <= score <= 100:
+            raise ModelError("分類補正のスコアが不正です。")
         return score
 
     def _detect(self, image: Image.Image, threshold: float):
@@ -242,7 +274,8 @@ class Engine:
                     if crop is None:
                         skipped += 1
                         continue
-                    score = self._classify(crop) if settings.mode == "detection_classification" else None
+                    score = (self._classify_calibrated(crop, settings.machine) if settings.use_calibration
+                             else self._classify(crop)) if settings.mode == "detection_classification" else None
                     candidate = score is not None and score > settings.classification_threshold
                     cells.append(CellResult(index, clipped, confidence, score, candidate))
         except Exception as exc:
@@ -264,8 +297,13 @@ class Engine:
             "preprocessing": {"detector_long_side": 640, "crop_size": [224, 224],
                               "crop_padding_ratio": 0.0, "mean": IMAGENET_MEAN, "std": IMAGENET_STD},
             "classification_score": "softmax class 1 × 100; class meaning not independently verified",
+            "calibration": {"available": self.calibration is not None,
+                            "sha256": CALIBRATION_SHA256 if self.calibration else None,
+                            "score_definition": "local frozen-feature linear head sigmoid × 100 when use_calibration=true",
+                            "training_membership": "unknown for original model; local head fitted on calibration split only"},
         }
 
     def close(self) -> None:
         self.loaded = False
         self._detector = self._classifier = self._transform = None
+        self.calibration = None

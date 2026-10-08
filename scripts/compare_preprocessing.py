@@ -60,7 +60,7 @@ def compare_roi(engine: Engine, image: Image.Image, box: Iterable[int], jpeg_qua
 
     # The comparison path models enlargement of the same ROI, JPEG round-trip
     # in memory, then the classifier's normal 224×224 input size.
-    enlarged = crop.resize((640, 640), Image.Resampling.BILINEAR)
+    enlarged = image.convert("RGB").crop(clipped).resize((640, 640), Image.Resampling.BILINEAR)
     from io import BytesIO
     buffer = BytesIO()
     enlarged.save(buffer, format="JPEG", quality=jpeg_quality)

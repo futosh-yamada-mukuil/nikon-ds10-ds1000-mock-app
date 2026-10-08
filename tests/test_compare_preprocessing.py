@@ -40,6 +40,22 @@ class ComparePreprocessingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "4px"):
             compare_roi(MagicMock(), Image.new("RGB", (12, 10)), (0, 0, 3, 8), 80)
 
+    def test_jpeg_path_enlarges_original_roi_before_the_224_resize(self):
+        from io import BytesIO
+
+        image = Image.new("RGB", (19, 15))
+        image.putdata([(x * 31 % 256, y * 47 % 256, (x + y) * 19 % 256)
+                       for y in range(15) for x in range(19)])
+        engine = MagicMock()
+        engine._classify.side_effect = [1., 2.]
+        compare_roi(engine, image, (1, 2, 17, 14), 83)
+        buffer = BytesIO()
+        image.crop((1, 2, 17, 14)).resize((640, 640), Image.Resampling.BILINEAR).save(buffer, "JPEG", quality=83)
+        buffer.seek(0)
+        with Image.open(buffer) as decoded:
+            expected = decoded.convert("RGB").resize((224, 224), Image.Resampling.BILINEAR)
+        self.assertEqual(engine._classify.call_args_list[1].args[0].tobytes(), expected.tobytes())
+
     def test_run_writes_same_image_roi_scores_and_conditions(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -153,22 +153,19 @@ class PreviewFileAndControlTests(unittest.TestCase):
         self.assert_large()
         self.assertTrue(self.window.preview.auto_fit)
 
-    def test_repeated_brightness_grayscale_and_result_refresh_never_shrink_fit(self):
+    def test_repeated_result_refresh_never_shrinks_fit(self):
         initial = image_rectangle(self.window.preview).height()
-        for value in range(-20, 21, 2):
-            self.window.brightness.setValue(value)
-            self.window.grayscale.setChecked(not self.window.grayscale.isChecked())
+        for _ in range(4):
+            self.window.refresh_preview()
             settle()
             self.assert_large()
         self.window.receive_result(0, self.window.original_image, FrameResult([]))
         settle()
         self.assertGreaterEqual(image_rectangle(self.window.preview).height(), initial * .95)
 
-    def test_explicit_zoom_survives_display_correction_and_result_updates(self):
+    def test_explicit_zoom_survives_result_updates(self):
         self.window.preview.zoom_in()
         initial = self.window.preview.transform().m11()
-        self.window.brightness.setValue(10)
-        self.window.grayscale.setChecked(True)
         self.window.receive_result(0, self.window.original_image, FrameResult([]))
         settle()
         self.assertAlmostEqual(self.window.preview.transform().m11(), initial)

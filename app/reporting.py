@@ -204,9 +204,11 @@ def export_bundle(
         "displayed_frame": displayed,
         "analyzed_frames": records,
         "classification": {
-            "score_definition": "softmax class index 1 probability multiplied by 100",
+            "score_definition": ("local frozen-feature linear head sigmoid multiplied by 100"
+                                 if settings.use_calibration else "softmax class index 1 probability multiplied by 100"),
             "candidate_rule": "class1_score > classification_threshold (strict; unrounded)",
-            "class1_label_meaning": "unverified",
+            "class1_label_meaning": ("positive under supplied red annotations; unmarked ROIs assumed negative"
+                                    if settings.use_calibration else "unverified"),
             "medical_interpretation": "not established; score is not a measured DFI percentage",
         },
         "evaluation": {"ground_truth_compared": False, "accuracy_metrics": None},

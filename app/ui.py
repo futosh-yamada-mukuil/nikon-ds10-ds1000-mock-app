@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QGraphicsView, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QPlainTextEdit, QProgressBar, QPushButton,
     QScrollArea, QSizePolicy, QSlider, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget, QCheckBox,
+    QVBoxLayout, QWidget,
 )
 
 from .domain import InferenceSettings
@@ -161,7 +161,6 @@ class MainWindow(QMainWindow):
             QHeaderView::section { background: #eaf0f6; padding: 5px; border: 0; }
             QProgressBar { border: 1px solid #cdd7e1; text-align: center; min-height: 17px; }
             QProgressBar::chunk { background: #267bbe; }
-            QCheckBox { padding: 3px 0; }
         """)
         split = QSplitter(Qt.Horizontal)
         self.setCentralWidget(split)
@@ -238,28 +237,17 @@ class MainWindow(QMainWindow):
         self.class_threshold.setSingleStep(.1)
         self.class_threshold.setValue(.5)
         setting_form.addRow("分類しきい値", self.class_threshold)
-        threshold_note = QLabel("赤枠 = class1スコアが分類しきい値を超過\n設定変更は次回の解析に適用されます\n学習ラベルの意味は確認待ちです")
-        threshold_note.setWordWrap(True)
-        threshold_note.setStyleSheet("color: #6b7c8f; font-size: 11px;")
-        setting_form.addRow(threshold_note)
+        self.threshold_note = QLabel("赤枠 = class1スコアが分類しきい値を超過\n設定変更は次回の解析に適用されます\n学習ラベルの意味は確認待ちです")
+        self.threshold_note.setWordWrap(True)
+        self.threshold_note.setStyleSheet("color: #6b7c8f; font-size: 11px;")
+        setting_form.addRow(self.threshold_note)
+        self.calibration_button = QPushButton("DS1000の改善設定を適用")
+        self.calibration_button.setCheckable(True)
+        self.calibration_button.setEnabled(False)
+        self.calibration_button.setToolTip("DS1000の正解画像で学習した分類補正です。比較用56枚で誤検出と見逃しが減少しました。初期設定の0.5／0.5には適用されません。")
+        self.calibration_button.toggled.connect(self.toggle_calibration)
+        setting_form.addRow(self.calibration_button)
         left.addWidget(setting_group)
-        display_group = QGroupBox("表示・マウス操作")
-        display_layout = QVBoxLayout(display_group)
-        self.grayscale = QCheckBox("グレースケール表示")
-        self.grayscale.toggled.connect(self.refresh_preview)
-        display_layout.addWidget(self.grayscale)
-        brightness_form = QFormLayout()
-        brightness_form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        self.brightness = QSpinBox()
-        self.brightness.setRange(-100, 100)
-        self.brightness.valueChanged.connect(self.refresh_preview)
-        brightness_form.addRow("明るさ補正", self.brightness)
-        display_layout.addLayout(brightness_form)
-        fit_button = QPushButton("画面に合わせる")
-        fit_button.clicked.connect(lambda: self.preview.fit())
-        display_layout.addWidget(fit_button)
-        display_layout.addWidget(QLabel("Ctrl / ⌘ + ホイール: 拡大 / 縮小\nドラッグ: 移動　表示補正はモデル入力に影響しません"))
-        left.addWidget(display_group)
         self.export_button = QPushButton("検索結果CSVをダウンロード")
         self.export_button.clicked.connect(self.save_results)
         left.addWidget(self.export_button)
@@ -353,6 +341,8 @@ class MainWindow(QMainWindow):
         self.mode.currentIndexChanged.connect(self.refresh_pending_counts)
         self.det_threshold.valueChanged.connect(self.refresh_pending_counts)
         self.class_threshold.valueChanged.connect(self.refresh_pending_counts)
+        self.machine.currentIndexChanged.connect(self.sync_calibration_controls)
+        self.mode.currentIndexChanged.connect(self.sync_calibration_controls)
         self.update_result_counts()
         self.statusBar().showMessage("ファイル入力モック · 推論前の件数は未測定")
 
@@ -496,7 +486,8 @@ class MainWindow(QMainWindow):
         self.update_result_counts()
         self.refresh_preview()
         self.model_status.setText("モデル読み込み中…")
-        self.loader = ModelWorker(Path(self.detector_path.text()), Path(self.classifier_path.text()), self.device, self)
+        self.loader = ModelWorker(Path(self.detector_path.text()), Path(self.classifier_path.text()), self.device, self,
+                                  calibration_path=self.config_path.parent / "cell-calibration.local.json")
         self.loader.message.connect(self.message)
         self.loader.ready.connect(self.models_ready)
         self.loader.failed.connect(self.operation_failed)
@@ -561,7 +552,33 @@ class MainWindow(QMainWindow):
         self.message(f"ファイル読み込み: {self.source_path.name}")
 
     def current_settings(self):
-        return InferenceSettings(detection_threshold=self.det_threshold.value(), classification_threshold=self.class_threshold.value(), machine=self.machine.currentText(), mode=self.mode.currentData())
+        return InferenceSettings(detection_threshold=self.det_threshold.value(), classification_threshold=self.class_threshold.value(), machine=self.machine.currentText(), mode=self.mode.currentData(), use_calibration=self.calibration_button.isChecked())
+
+    def sync_calibration_controls(self):
+        data = getattr(self.engine, "calibration", None)
+        available = bool(data and "DS1000" in data["machines"] and self.machine.currentText() == "DS1000"
+                         and self.mode.currentData() == "detection_classification")
+        if not available and self.calibration_button.isChecked():
+            self.calibration_button.setChecked(False)
+        self.calibration_button.setEnabled(available and not self.loader and not self.worker)
+
+    def toggle_calibration(self, enabled):
+        if enabled:
+            data = getattr(self.engine, "calibration", None)
+            if not data or self.machine.currentText() != "DS1000" or self.mode.currentData() != "detection_classification":
+                self.calibration_button.setChecked(False)
+                return
+            head = data["machines"]["DS1000"]
+            self.det_threshold.setValue(head["detection_threshold"])
+            self.class_threshold.setValue(head["classification_threshold"])
+            self.threshold_note.setText("赤枠 = 補正後の陽性スコアが分類しきい値を超過\nDS1000の正解画像を使った分類補正\n別の画像での精度は未確認です")
+            self.calibration_button.setText("DS1000改善設定を使用中（押すと標準）")
+        else:
+            self.det_threshold.setValue(.5)
+            self.class_threshold.setValue(.5)
+            self.threshold_note.setText("赤枠 = class1スコアが分類しきい値を超過\n設定変更は次回の解析に適用されます\n学習ラベルの意味は確認待ちです")
+            self.calibration_button.setText("DS1000の改善設定を適用")
+        self.refresh_pending_counts()
 
     def start_analysis(self):
         if not self.engine or not self.media or self.worker or self.loader:
@@ -620,10 +637,10 @@ class MainWindow(QMainWindow):
         if self.original_image is None:
             return
         if self.result is not None:
-            display = render_result(self.original_image, self.result, show_all=False, show_labels=False, grayscale=self.grayscale.isChecked(), brightness=self.brightness.value(), box_color=CANDIDATE_COLOR)
+            display = render_result(self.original_image, self.result, show_all=False, show_labels=False, box_color=CANDIDATE_COLOR)
         else:
             from .domain import FrameResult
-            display = render_result(self.original_image, FrameResult(cells=[]), grayscale=self.grayscale.isChecked(), brightness=self.brightness.value())
+            display = render_result(self.original_image, FrameResult(cells=[]))
         self.preview.set_image(display, reset_view=reset_view)
 
     def toggle_pause(self):
@@ -667,6 +684,7 @@ class MainWindow(QMainWindow):
         for control in (self.machine, self.stride, self.mode, self.det_threshold, self.class_threshold, self.detector_path, self.classifier_path, self.save_config_button, *self.model_path_buttons):
             control.setEnabled(not busy)
         self.start_button.setEnabled(not busy and self.engine is not None and self.media is not None)
+        self.sync_calibration_controls()
         self.pause_button.setEnabled(self.worker is not None)
         self.stop_button.setEnabled(self.worker is not None)
         self.export_button.setEnabled(not busy and self.result is not None)
@@ -713,8 +731,8 @@ class MainWindow(QMainWindow):
         self.preview_timer.stop()
         output = self.export_directory / f"{self.source_path.stem}_{datetime.now():%Y%m%d_%H%M%S_%f}"
         try:
-            rendered = render_result(self.original_image, self.result, show_all=False, show_labels=False, grayscale=self.grayscale.isChecked(), brightness=self.brightness.value(), box_color=CANDIDATE_COLOR)
-            display_settings = {"show_all": False, "show_labels": False, "box_color": CANDIDATE_COLOR, "grayscale": self.grayscale.isChecked(), "brightness": self.brightness.value()}
+            rendered = render_result(self.original_image, self.result, show_all=False, show_labels=False, box_color=CANDIDATE_COLOR)
+            display_settings = {"show_all": False, "show_labels": False, "box_color": CANDIDATE_COLOR, "grayscale": False, "brightness": 0}
             paths = export_bundle(output, self.source_path, self.frame_index, self.original_image, self.result, self.run_settings, self.engine.get_model_metadata(), rendered_image=rendered, history=self.history if self.media.is_video else None, display_settings=display_settings, input_metadata=self.run_metadata)
             download = CsvDownload(paths["results_csv"])
             self.downloads.append(download)
