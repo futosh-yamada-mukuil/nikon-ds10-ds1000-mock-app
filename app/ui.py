@@ -233,8 +233,8 @@ class MainWindow(QMainWindow):
         setting_form.addRow("検出しきい値", self.det_threshold)
         self.class_threshold = QDoubleSpinBox()
         self.class_threshold.setRange(0, 100)
-        self.class_threshold.setDecimals(1)
-        self.class_threshold.setSingleStep(.1)
+        self.class_threshold.setDecimals(2)
+        self.class_threshold.setSingleStep(.01)
         self.class_threshold.setValue(.5)
         setting_form.addRow("分類しきい値", self.class_threshold)
         self.threshold_note = QLabel("赤枠 = class1スコアが分類しきい値を超過\n設定変更は次回の解析に適用されます\n学習ラベルの意味は確認待ちです")
@@ -256,7 +256,7 @@ class MainWindow(QMainWindow):
         self.export_feedback.setOpenExternalLinks(True)
         self.export_feedback.setStyleSheet("color: #617488; font-size: 11px;")
         left.addWidget(self.export_feedback)
-        model_group = QGroupBox("モデルファイル設定")
+        model_group = QGroupBox("モデルファイル設定", self)
         model_layout = QVBoxLayout(model_group)
         self.detector_path = QLineEdit()
         self.classifier_path = QLineEdit()
@@ -274,7 +274,8 @@ class MainWindow(QMainWindow):
         self.save_config_button = QPushButton("このモデル設定を保存")
         self.save_config_button.clicked.connect(self.save_config)
         model_layout.addWidget(self.save_config_button)
-        left.addWidget(model_group)
+        # Keep saved model paths internally without displaying file controls.
+        model_group.hide()
         left.addStretch()
         scroll.setWidget(panel)
         scroll.setMinimumWidth(320)
@@ -410,7 +411,7 @@ class MainWindow(QMainWindow):
             getattr(self, f"{name}_count").setText("—" if count is None else f"{count:,}")
             getattr(self, f"{name}_unit").setVisible(count is not None)
         self.detection_note.setText("分類のみのため、物体検知は行いません" if settings.mode == "classification_only" else f"検出しきい値 {settings.detection_threshold:.2f} 以上")
-        self.candidate_note.setText("物体検知のみのため、分類は行いません" if settings.mode == "detection_only" else f"分類スコアが {settings.classification_threshold:.1f} を超えた数 · 赤枠で表示")
+        self.candidate_note.setText("物体検知のみのため、分類は行いません" if settings.mode == "detection_only" else f"分類スコアが {settings.classification_threshold:.2f} を超えた数 · 赤枠で表示")
         self.result_state.setText({"waiting": "解析待ち", "analyzing": "解析中", "completed": "解析完了", "paused": "一時停止", "stopping": "停止処理中", "stopped": "停止", "error": "解析エラー"}[state])
         if self.result is None:
             context = "結果はまだありません。画像・動画を選び、「処理開始」を押してください。"
@@ -607,14 +608,14 @@ class MainWindow(QMainWindow):
         self.worker.completed.connect(self.analysis_completed)
         self.worker.finished.connect(self.analysis_finished)
         self.set_busy(True)
-        self.message(f"解析開始: {self.run_settings.machine} / {self.mode.currentText()} / 検出 {self.run_settings.detection_threshold} / 分類 {self.run_settings.classification_threshold}")
+        self.message(f"解析開始: {self.run_settings.machine} / {self.mode.currentText()} / 検出 {self.run_settings.detection_threshold:.2f} / 分類 {self.run_settings.classification_threshold:.2f}")
         self.worker.start()
 
     def analysis_completed(self, cancelled):
         self.run_metadata["stop_reason"] = "cancelled" if cancelled else "completed"
         self.update_result_counts("stopped" if cancelled else "completed")
         self.message("停止しました。保存対象は処理済みフレームです。" if cancelled else "解析が完了しました。")
-        self.statusBar().showMessage(f"{'停止' if cancelled else '解析完了'} · 検出しきい値 {self.run_settings.detection_threshold} / 分類しきい値 {self.run_settings.classification_threshold}")
+        self.statusBar().showMessage(f"{'停止' if cancelled else '解析完了'} · 検出しきい値 {self.run_settings.detection_threshold:.2f} / 分類しきい値 {self.run_settings.classification_threshold:.2f}")
 
     def receive_result(self, index, image, result):
         self.frame_index, self.original_image, self.result = index, image, result

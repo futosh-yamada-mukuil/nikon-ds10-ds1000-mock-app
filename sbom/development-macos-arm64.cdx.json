@@ -388,12 +388,12 @@
     },
     {
       "type": "file",
-      "bom-ref": "file:source:ui.py:5aed0f654d4ef0fc660aefb571789c99dc0989af8af9effd76bc9b2fd113e51c",
+      "bom-ref": "file:source:ui.py:cabdd1b6f70d9a4d0fdf1d8554eacdf5bbde2dade924008ebcfce55a396222a3",
       "name": "ui.py",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "5aed0f654d4ef0fc660aefb571789c99dc0989af8af9effd76bc9b2fd113e51c"
+          "content": "cabdd1b6f70d9a4d0fdf1d8554eacdf5bbde2dade924008ebcfce55a396222a3"
         }
       ],
       "properties": [
