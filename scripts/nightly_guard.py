@@ -104,6 +104,7 @@ class QuotaGuard:
                 if not count:
                     raise ValueError("no_confirmed_quota_windows")
             self.windows = windows
+            self.state.update(last_quota_windows=windows, last_usage_received_at=self.received_at)
             if any(w["remaining_percent"] <= self.stop_remaining for w in windows):
                 return self.stop("remaining_at_or_below_stop_threshold")
             if start and any(w["remaining_percent"] <= self.start_remaining for w in windows):
@@ -157,6 +158,11 @@ class GuardedSession:
             self.completed = True
             self.guard.state["last_turn_status"] = self.status
             self.guard.save()
+        elif method == "item/completed" and params.get("threadId") == self.thread_id and params.get("turnId") == self.turn_id:
+            item = params.get("item", {})
+            if item.get("type") == "agentMessage" and item.get("phase") == "final_answer":
+                self.guard.state.setdefault("task_summaries", []).append(item.get("text", "")[:3500])
+                self.guard.save()
         elif "id" in event and method:
             # Never grant permissions or send external messages on behalf of Dot.
             self.guard.stop("unexpected_server_request_requires_operator")

@@ -3,7 +3,7 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
   "version": 1,
-  "serialNumber": "urn:uuid:895dfae7-2f37-580e-b5bd-179b4838628a",
+  "serialNumber": "urn:uuid:6effe6b6-7e9d-530e-b82f-dacdd74b14d5",
   "metadata": {
     "tools": [
       {
@@ -136,6 +136,27 @@
     },
     {
       "type": "file",
+      "bom-ref": "file:source:compare_preprocessing.py:9b1e3455ba003ce8f3174e6e229a7701b64f235a08fe7ad407f2fe9615b2c1fb",
+      "name": "compare_preprocessing.py",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9b1e3455ba003ce8f3174e6e229a7701b64f235a08fe7ad407f2fe9615b2c1fb"
+        }
+      ],
+      "properties": [
+        {
+          "name": "nikon:file-role",
+          "value": "source"
+        },
+        {
+          "name": "nikon:license-status",
+          "value": "unconfirmed"
+        }
+      ]
+    },
+    {
+      "type": "file",
       "bom-ref": "file:source:domain.py:d46aff05d3eb222e25d7c783347ee202f6d5c1ca410a81493e3142587ef40a4e",
       "name": "domain.py",
       "hashes": [
@@ -178,12 +199,12 @@
     },
     {
       "type": "file",
-      "bom-ref": "file:source:inference.py:b3fe793f2aa429d868a96c669811e0c296685543eeb5ed69483719c7c354ad05",
+      "bom-ref": "file:source:inference.py:0083965550bdbf3ad4dbdf5b7ea4609367810e0c1ae874b473016af4b3f4a492",
       "name": "inference.py",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "b3fe793f2aa429d868a96c669811e0c296685543eeb5ed69483719c7c354ad05"
+          "content": "0083965550bdbf3ad4dbdf5b7ea4609367810e0c1ae874b473016af4b3f4a492"
         }
       ],
       "properties": [
@@ -220,12 +241,12 @@
     },
     {
       "type": "file",
-      "bom-ref": "file:source:nightly.py:7d80a6e82d87fd2f30817e29ddb2c5f9d33ab302d9bbef442dd8de7235c92494",
+      "bom-ref": "file:source:nightly.py:f9ed9b4be9e54461bc7fcabd264ba1e4db9b0a46f30db332eb30c39dbcf4a050",
       "name": "nightly.py",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "7d80a6e82d87fd2f30817e29ddb2c5f9d33ab302d9bbef442dd8de7235c92494"
+          "content": "f9ed9b4be9e54461bc7fcabd264ba1e4db9b0a46f30db332eb30c39dbcf4a050"
         }
       ],
       "properties": [
@@ -241,12 +262,12 @@
     },
     {
       "type": "file",
-      "bom-ref": "file:source:nightly_guard.py:73ca9242a7cbf64d3088db9b3b737547ea89337f8847b466dd9b88b67c6b835a",
+      "bom-ref": "file:source:nightly_guard.py:a1a3488d6ef440a5ce1023e4e6a0d483f8522d75fda96bb767c067130676fed5",
       "name": "nightly_guard.py",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "73ca9242a7cbf64d3088db9b3b737547ea89337f8847b466dd9b88b67c6b835a"
+          "content": "a1a3488d6ef440a5ce1023e4e6a0d483f8522d75fda96bb767c067130676fed5"
         }
       ],
       "properties": [

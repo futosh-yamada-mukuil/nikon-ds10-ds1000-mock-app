@@ -135,11 +135,26 @@ class InferenceBehaviorTests(unittest.TestCase):
         with self.assertRaisesRegex(ModelError, "backend failed"):
             self.engine.analyze(self.image, InferenceSettings())
 
-    def test_crop_matches_reference_border_and_resize_contract(self):
+    def test_crop_uses_exclusive_image_edges_and_clips_outside_boxes(self):
         crop, box = crop_and_resize(self.image, (110, 90, -10, -10))
-        self.assertEqual(box, (0, 0, 99, 79))
+        self.assertEqual(box, (0, 0, 100, 80))
         self.assertEqual(crop.size, (224, 224))
+        self.assertEqual(crop_and_resize(self.image, (-20, -20, 4, 4))[1], (0, 0, 4, 4))
+        self.assertEqual(crop_and_resize(self.image, (96, 76, 120, 100))[1], (96, 76, 100, 80))
         self.assertEqual(crop_and_resize(self.image, (0, 0, 3, 20)), (None, None))
+
+    def test_crop_accepts_exact_four_pixel_edges_and_rejects_smaller(self):
+        crop, box = crop_and_resize(self.image, (0, 0, 4, 4))
+        self.assertEqual(box, (0, 0, 4, 4))
+        self.assertEqual(crop.size, (224, 224))
+        self.assertEqual(crop_and_resize(self.image, (0, 0, 4, 3)), (None, None))
+
+    def test_crop_preserves_all_four_image_corners(self):
+        image = Image.new("RGB", (12, 10))
+        for box in ((0, 0, 4, 4), (8, 0, 12, 4), (0, 6, 4, 10), (8, 6, 12, 10)):
+            crop, clipped = crop_and_resize(image, box)
+            self.assertEqual(clipped, box)
+            self.assertEqual(crop.size, (224, 224))
 
     def test_detection_rescales_coordinates_filters_equality_and_sanitizes_nan(self):
         import numpy as np
@@ -152,6 +167,20 @@ class InferenceBehaviorTests(unittest.TestCase):
         self.assertEqual(result, [((128, 64, 256, 128), 0.29)])
         self.assertEqual(self.engine._detector.predict.call_args.args[0].size, (640, 360))
         self.assertEqual(self.engine._detector.predict.call_args.kwargs["threshold"], 0.0)
+
+    def test_detection_restores_coordinates_using_rounded_non_square_dimensions(self):
+        import numpy as np
+
+        # 1001x667 is resized to 640x426: its two realized axis scales differ.
+        self.engine._detector = MagicMock()
+        self.engine._detector.predict.return_value = SimpleNamespace(
+            xyxy=np.array([[639, 425, 640, 426], [100, 100, 200, 200]]),
+            confidence=np.array([0.9, 0.9]),
+        )
+        result = self.engine._detect(Image.new("RGB", (1001, 667)), 0.5)
+        self.assertEqual(self.engine._detector.predict.call_args.args[0].size, (640, 426))
+        self.assertEqual(result, [((999, 665, 1001, 667), 0.9),
+                                 ((156, 156, 312, 313), 0.9)])
 
     def test_settings_reject_unknown_modes_and_nonfinite_thresholds(self):
         for values in ({"mode": "unknown"}, {"machine": "unknown"},

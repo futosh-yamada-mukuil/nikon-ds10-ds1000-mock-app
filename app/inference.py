@@ -107,8 +107,10 @@ def crop_and_resize(image: Image.Image, box) -> tuple[Image.Image | None, tuple[
         x1, x2 = x2, x1
     if y2 < y1:
         y1, y2 = y2, y1
-    x1, x2 = [max(0, min(x, width - 1)) for x in (x1, x2)]
-    y1, y2 = [max(0, min(y, height - 1)) for y in (y1, y2)]
+    # PIL crop uses an exclusive right/bottom edge, so valid endpoints include
+    # the image width and height themselves.
+    x1, x2 = [max(0, min(x, width)) for x in (x1, x2)]
+    y1, y2 = [max(0, min(y, height)) for y in (y1, y2)]
     if x2 - x1 < 4 or y2 - y1 < 4:
         return None, None
     clipped = (x1, y1, x2, y2)
@@ -192,10 +194,14 @@ class Engine:
         rgb = np.asarray(image.convert("RGB"))
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         height, width = bgr.shape[:2]
-        scale = 1.0
+        scale_x = scale_y = 1.0
         if max(height, width) > 640:
             scale = 640 / float(max(height, width))
-            bgr = cv2.resize(bgr, (max(1, int(width * scale)), max(1, int(height * scale))),
+            resized_width = max(1, int(width * scale))
+            resized_height = max(1, int(height * scale))
+            scale_x = resized_width / float(width)
+            scale_y = resized_height / float(height)
+            bgr = cv2.resize(bgr, (resized_width, resized_height),
                              interpolation=cv2.INTER_AREA)
         resized = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
         with torch.no_grad():
@@ -212,8 +218,9 @@ class Engine:
         confidence = np.nan_to_num(confidence, nan=0.0)
         if not np.isfinite(confidence).all() or (confidence < 0).any() or (confidence > 1).any():
             raise ModelError("検出モデルから不正な信頼度が返されました。")
-        if scale != 1:
-            boxes /= scale
+        if scale_x != 1 or scale_y != 1:
+            boxes[:, (0, 2)] /= scale_x
+            boxes[:, (1, 3)] /= scale_y
         return [(tuple(int(value) for value in box), float(score))
                 for box, score in zip(boxes, confidence) if score >= threshold]
 

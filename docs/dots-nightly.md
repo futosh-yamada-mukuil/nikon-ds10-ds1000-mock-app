@@ -1,13 +1,13 @@
 # Dots／Codex夜間運用
 
-対象: `/Users/futoshi/mukuil/nikon-ds10-ds1000-mock-app`。日本時間 **00:00〜04:00、1日1回・最大3件**。停止条件を完成より優先します。
+対象: `/Users/futoshi/mukuil/nikon-ds10-ds1000-mock-app`。日本時間 **23:00〜04:00、1日1回・最大3件**。停止条件を完成より優先します。
 
 ## 現在の状態
 
-**自動実行は無効**です。`config/nightly.example.json` の `enabled` と `validated_unattended` はfalse。Cron・LaunchAgent・Codexの定期AI呼び出しは登録していません。
-Dotsの実接続とスケジューラーは未設定です。`DOT_BRIEF.md` は引き継ぎ資料で、公式Dots設定ではありません。
+**2026年10月7日夜だけのローカル実行を予約済み（10月8日00:11開始）**です。実行設定はGit対象外の `config/nightly.local.json`。例示設定は引き続きfalseです。23時〜翌4時を1夜として扱い、日付が変わっても2回目は実行しません。
+Dots「ムーちゃん」のWebチャットへ3件の優先順・制約を実際に送信し、受領と別タスクを起動しない方針を確認しました。Dotsは依頼整理役、実行はガード付きローカルCodexのみです。Dotsの自律的な別Codex／Work起動や定期AI監視は有効化しません。`DOT_BRIEF.md` は公式Dots設定ではありません。
 Codex CLI **0.160.0**の生成スキーマ、ChatGPT認証、`account/rateLimits/read`、モデルカタログを実環境で確認しました。取得時はcodex枠の使用率5％・残量95％、期間10080分、リセット時刻は取得値をそのまま記録しています。secondaryは明示nullで、追加の数値枠は返っていません。固定の「5時間／週間」構成は仮定しません。
-実AIターンでの中断完了と選択モデルの推論アクセスは、枠温存のため未検証です。模擬値による中断要求・停止の永続化など14件のテストが成功しました。実際のローカルテスト用プロセスも模擬利用更新で停止できることを確認しました。無人運用が稼働中とは表現しません。
+今回、gpt-6-luna / lowの実ターンで無害なコマンド開始を確認し、模擬残量80％の更新を注入して `turn/interrupt` 要求から `turn/completed: interrupted` まで確認しました。実残量を80％まで消費した試験ではありません。初回は認証初期化通知を安全側に停止したため、通常の起動順にそろえて1回だけ再試行しました。停止判定・日付境界・通常プログラムによる報告など18件のローカルテストが成功しました。最新の取得時点の残量は93％でした。Windows・実RTX速度・実データでの精度向上は未確認です。
 
 ## 制御
 
@@ -32,8 +32,13 @@ cd /Users/futoshi/mukuil/nikon-ds10-ds1000-mock-app
   --codex /Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex --probe
 ```
 
-通常実行は同じコマンドから `--probe` を外しますが、現在は無効設定によりAI処理を開始しません。
-有効化前に、実ターンの安全な中断、Dotsからの依頼がこの入口だけを通る接続、1日1回のスケジューラーを確認します。Dotsが直接別のCodex／Workへ投げる経路は許可しません。準備不足なら無効のままです。
+この例は無効の例示設定を読み込みます。今夜の予約は `--config config/nightly.local.json` を追加した有効設定を使用します。
+今夜はローカルの1回限りのLaunchAgentが `--config config/nightly.local.json` でこの入口を起動します。カレンダー開始条件・LaunchOnlyOnce・KeepAlive=falseを使用し、設定のscheduled_dateでも今夜以外を拒否します。plistは `.nightly-local/` に置き、ログイン時の自動読込先へは置きません。Dotsが直接別のCodex／Workへ投げる経路は許可しません。停止状態はリセットや再起動でも解除しません。
 プロジェクトのGit・外部送信制限を変更しません。無人中の承認要求は許可せず停止します。この制御は所有する夜間スレッドだけに適用し、本人の対話を停止しません。
 
 公式仕様: [Codex App Server](https://learn.chatgpt.com/docs/app-server)。実際の返却値は `outputs/usage_guard_20261007/`、テストは `tests/test_nightly_guard.py` を参照してください。
+
+## 今夜の改善と報告
+
+PowerPoint 12〜13枚目を優先し、切り出し座標の境界、同一ROIの前処理経路比較、機種／L0〜L5別の指標集計の3件を固定しています。動画追跡・再学習・RTX実測は対象外です。
+監視・停止・最終報告に追加AIを呼びません。既存記録から `.nightly-local/report.md` と `/Users/futoshi/Downloads/Nikon夜間作業報告_20261007.md` を通常プログラムで保存します。未完了・未検証を明記し、実データの精度90％達成とは推測しません。ローカル処理のためMacの電源・ネット接続が必要で、蓋を閉じたスリープ中の継続は保証しません。

@@ -1,6 +1,6 @@
 """One local nightly invocation. Disabled until unattended cancellation is validated."""
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
 import subprocess
@@ -9,6 +9,50 @@ from zoneinfo import ZoneInfo
 
 from codex_rpc import AppServer
 from nightly_guard import QuotaGuard, GuardedSession, change_record
+
+
+def night_window(now, times):
+    """Return the operational date and end, including a midnight crossing."""
+    begin, end = [datetime.strptime(t, "%H:%M").time() for t in times]
+    if begin == end:
+        raise ValueError("Night window must have a distinct start and end")
+    day = now.date()
+    if begin > end and now.time() < end:
+        day -= timedelta(days=1)
+    starts = datetime.combine(day, begin, now.tzinfo)
+    finishes = datetime.combine(day + timedelta(days=begin > end), end, now.tzinfo)
+    return (day.isoformat(), finishes.timestamp()) if starts <= now < finishes else None
+
+
+def write_report(local, state, root, config):
+    """Save a plain report using acquired records, never an extra AI turn."""
+    rows = ["# Nikonモックアプリ 夜間作業報告", "",
+            "状態: " + ("停止" if state.get("stopped") else state.get("run_status", "準備")),
+            "作業日: " + str(state.get("last_run_date", config.get("scheduled_date", "未開始"))),
+            "モデル: " + config["model"] + " / " + config["effort"],
+            "時間帯: " + "〜".join(config["time_window"]) + "（日本時間）", ""]
+    if state.get("scheduled_start_at"):
+        rows += ["予約時刻: " + state["scheduled_start_at"], "終了上限: " + str(state.get("night_end_at")), ""]
+    if state.get("reason") and state.get("stopped"):
+        rows += ["停止理由: " + state["reason"], "停止日時: " + str(state.get("stopped_at")), ""]
+    windows = state.get("last_quota_windows", state.get("quota_windows", []))
+    rows += ["確認済み利用枠（残量）: " + (", ".join(
+        f"{w['limit_id']}/{w['window']} {w['remaining_percent']}%" for w in windows) or "未取得"), "",
+        "## 作業結果", ""]
+    rows += state.get("task_summaries", []) or ["完了結果はまだありません。"]
+    rows += ["", "## テスト", ""]
+    rows += [f"- {t['status']} / exit={t['exit_code']} / {t['log']}" for t in state.get("executed_tests", [])] or ["未実行"]
+    rows += ["", "## 未完了", ""]
+    rows += ["- " + t.splitlines()[0] for t in state.get("unfinished_tasks", [])] or ["記録上の未完了依頼はありません。"]
+    rows += ["", "## Git状態", "", "対象: " + str(root),
+             "既存変更を含む:", *state.get("changed_files_status", []), "",
+             "コミットおよびPushは実行していません"]
+    text = "\n".join(rows) + "\n"
+    (local / "report.md").write_text(text)
+    if config.get("report_path"):
+        target = Path(config["report_path"]).expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
 
 
 def main():
@@ -45,15 +89,21 @@ def main():
     rpc = session = None
     try:
         now = datetime.now(ZoneInfo(config["timezone"]))
-        begin, end = [datetime.strptime(t, "%H:%M").time() for t in config["time_window"]]
-        if begin >= end:
-            raise ValueError("Use the confirmed same-day midnight-to-morning window")
-        if not args.probe and not begin <= now.time() < end:
+        window = night_window(now, config["time_window"])
+        if not args.probe and window is None:
             print("設定された夜間時間帯ではありません。AI処理を開始しません。")
             return 0
-        if not args.probe and guard.state.get("last_run_date") == now.date().isoformat():
+        run_date, end_time = window or (now.date().isoformat(), None)
+        if not args.probe and config.get("scheduled_date") not in (None, run_date):
+            print("今回許可された作業日ではありません。AI処理を開始しません。")
+            return 0
+        if not args.probe and guard.state.get("last_run_date") == run_date:
             print("本日は実行済みです。1日1回の制限を維持します。")
             return 0
+        if not args.probe:
+            guard.state.update(unfinished_tasks=config.get("tasks", []), executed_tests=[],
+                               task_summaries=[], run_status="開始条件の確認中")
+            guard.save()
         rpc = AppServer(args.codex, local / "app_server.log")
         account = rpc.request("account/read", {"refreshToken": False})
         if (account.get("account") or {}).get("type") != "chatgpt":
@@ -71,7 +121,8 @@ def main():
         if args.probe:
             print(json.dumps({"auth": "chatgpt", "windows": guard.windows, "configured_model": config["model"],
                               "effort": config["effort"], "catalog_present": True, "inference_access_tested": False,
-                              "stopped": guard.state.get("stopped"), "unattended_enabled": False}, ensure_ascii=False))
+                              "stopped": guard.state.get("stopped"), "unattended_enabled":
+                              config.get("enabled") is True and config.get("validated_unattended") is True}, ensure_ascii=False))
             return 0
         tasks = config.get("tasks", [])
         if not tasks:
@@ -85,9 +136,9 @@ def main():
             raise ValueError("Duplicate tasks must not bypass the retry limit")
         if not guard.check(start=True):
             return 1
-        guard.state.update(last_run_date=now.date().isoformat(), unfinished_tasks=list(tasks), executed_tests=[])
+        guard.state.update(last_run_date=run_date, unfinished_tasks=list(tasks), executed_tests=[],
+                           task_summaries=[], run_status="実行中")
         guard.save()
-        end_time = datetime.combine(now.date(), end, now.tzinfo).timestamp()
         session = GuardedSession(rpc, guard, root, config["model"], config["effort"], end_time)
         for task in tasks:
             success = False
@@ -100,7 +151,7 @@ def main():
                     continue
                 if not session.read_usage() or not guard.check(start=False):
                     break
-                test_log = local / f"tests_{now.date()}_{tasks.index(task)}_{attempt}.log"
+                test_log = local / f"tests_{run_date}_{tasks.index(task)}_{attempt}.log"
                 command = [sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"]
                 test_record = {"command": command, "exit_code": None, "log": str(test_log), "status": "started"}
                 guard.state["executed_tests"].append(test_record)
@@ -119,7 +170,8 @@ def main():
                 guard.save()
             if guard.state.get("stopped"):
                 break
-        return 1 if guard.state.get("stopped") else 0
+        guard.state["run_status"] = "完了" if not guard.state["unfinished_tasks"] else "未完了あり"
+        return 1 if guard.state.get("stopped") or guard.state["unfinished_tasks"] else 0
     except Exception as error:
         guard.stop("controller_error: " + type(error).__name__)
         if session:
@@ -131,6 +183,8 @@ def main():
             rpc.close()
         guard.state["changed_files_status"] = change_record(root)
         guard.save()
+        if not args.probe:
+            write_report(local, guard.state, root, config)
         lock.rmdir()
 
 

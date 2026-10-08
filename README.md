@@ -121,5 +121,5 @@ bash scripts/review.sh
 
 作業ルールの正本は [AGENTS.md](AGENTS.md) です。[背景](docs/PROJECT_CONTEXT.md)、[作業フロー](docs/WORKFLOW.md)、[依頼テンプレート](docs/TASK_TEMPLATE.md) を参照してください。
 Gitは初回コミット前で、ソースは未追跡のままです。未追跡ファイルは通常の `git diff` に内容が出ないため、一覧と個別ファイルを確認します。コミット・Push・公開は個別の明示指示がある場合だけ実施します。
-Dot／GitHub／Slack／Codex Cloudの新規連携・送信は未実施です。[DOT_BRIEF.md](DOT_BRIEF.md) は独自の引き継ぎ資料で、Dotsの公式設定ファイルではありません。
-夜間の利用枠監視・停止制御と無効状態は [夜間運用](docs/dots-nightly.md) を参照してください。
+GitHubのmasterへの初回Pushは本人指示で実施済みです。Dotsには今夜の依頼を送信して受付確認済みです。Slackへの送信は未実施です。[DOT_BRIEF.md](DOT_BRIEF.md) は独自の引き継ぎ資料で、Dotsの公式設定ファイルではありません。
+夜間の利用枠監視・停止制御と今夜限定の予約は [夜間運用](docs/dots-nightly.md) を参照してください。
