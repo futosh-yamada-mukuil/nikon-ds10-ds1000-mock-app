@@ -48,7 +48,7 @@ class FakeEngine:
             raise RuntimeError("test engine timeout")
         if self.failure:
             raise RuntimeError("test analysis failure")
-        return FrameResult([CellResult(1, (4, 4, 20, 20), .8, 60., True)], device="cpu")
+        return FrameResult([CellResult(1, (4, 4, 20, 20), .8, .60, True)], device="cpu")
 
     def get_model_metadata(self):
         return {"device": "cpu", "loaded": True}
@@ -105,6 +105,20 @@ class UserFlowTests(unittest.TestCase):
         self.assertIn("—", self.window.summary.text())
         self.assertFalse(self.window.start_button.isEnabled())
 
+    def test_classification_ui_uses_normalized_units_and_run_threshold_in_card(self):
+        self.assertEqual(self.window.class_threshold.maximum(), 1.)
+        self.assertEqual(self.window.class_threshold.decimals(), 2)
+        self.assertEqual(self.window.class_threshold.text(), "0.50")
+        self.assertEqual(self.window.det_threshold.text(), "0.50")
+        self.prepare()
+        self.window.run_settings = InferenceSettings(classification_threshold=.44)
+        self.window.receive_result(0, self.window.original_image,
+                                   FrameResult([CellResult(1, (4, 4, 20, 20), .8, .60, True)]))
+        self.window.class_threshold.setValue(.50)
+        self.assertIn("0〜1", self.window.candidate_note.text())
+        self.assertIn("0.44", self.window.candidate_note.text())
+        self.assertIn("44%", self.window.candidate_note.text())
+
     def test_ds1000_improvement_is_opt_in_and_resets_when_machine_changes(self):
         engine = FakeEngine()
         engine.calibration = {"machines": {"DS1000": {"detection_threshold": .5, "classification_threshold": 60.}}}
@@ -115,7 +129,7 @@ class UserFlowTests(unittest.TestCase):
         self.assertTrue(self.window.calibration_button.isEnabled())
         self.window.calibration_button.click()
         self.assertTrue(self.window.current_settings().use_calibration)
-        self.assertEqual(self.window.current_settings().classification_threshold, 60.)
+        self.assertEqual(self.window.current_settings().classification_threshold, .60)
         self.window.machine.setCurrentText("DS10")
         self.assertFalse(self.window.current_settings().use_calibration)
         self.assertEqual(self.window.current_settings().classification_threshold, .5)
@@ -132,7 +146,7 @@ class UserFlowTests(unittest.TestCase):
         model_selectors = [button for button in self.window.findChildren(QPushButton) if button.text() == "選択"]
         self.assertEqual(len(model_selectors), 2)
         self.assertTrue(all(not button.isEnabled() for button in model_selectors))
-        self.window.class_threshold.setValue(70)  # Programmatic change cannot alter the captured run.
+        self.window.class_threshold.setValue(.70)  # Programmatic change cannot alter the captured run.
         engine.release.set()
         pump_until(lambda: self.window.worker is None)
         self.assertEqual(engine.settings[0].classification_threshold, .5)
@@ -145,7 +159,7 @@ class UserFlowTests(unittest.TestCase):
         self.window.engine = FakeEngine()
         self.window.open_source(self.make_video())
         self.window.run_settings = InferenceSettings()
-        result = FrameResult([CellResult(1, (4, 4, 20, 20), .8, 60., True)])
+        result = FrameResult([CellResult(1, (4, 4, 20, 20), .8, .60, True)])
         self.window.receive_result(0, self.window.original_image, result)
         self.window.set_busy(False)
         self.assertTrue(self.window.export_button.isEnabled())
@@ -158,7 +172,7 @@ class UserFlowTests(unittest.TestCase):
 
     def test_nullable_classification_and_detection_columns_are_rendered(self):
         self.prepare()
-        result = FrameResult([CellResult(1, (0, 0, 80, 60), None, 60., True),
+        result = FrameResult([CellResult(1, (0, 0, 80, 60), None, .60, True),
                               CellResult(2, (4, 4, 20, 20), .8, None, False)])
         self.window.receive_result(0, self.window.original_image, result)
         self.assertEqual(self.window.table.item(0, 1).text(), "—")
@@ -174,7 +188,7 @@ class UserFlowTests(unittest.TestCase):
     def test_manual_model_edit_requires_reload_and_invalidates_export(self):
         self.prepare()
         self.window.run_settings = InferenceSettings()
-        result = FrameResult([CellResult(1, (4, 4, 20, 20), .8, 60., True)])
+        result = FrameResult([CellResult(1, (4, 4, 20, 20), .8, .60, True)])
         self.window.receive_result(0, self.window.original_image, result)
         self.window.set_busy(False)
         self.window.detector_path.setText("different_detector.pt")

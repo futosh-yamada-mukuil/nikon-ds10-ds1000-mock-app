@@ -22,6 +22,40 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.inference import Engine, crop_and_resize, file_sha256
+from app.domain import classification_score_from_percent
+
+
+def load_cached_predictions(output: Path) -> list[dict]:
+    """Read versioned scores or explicitly identified legacy percentages, in memory."""
+    metadata = json.loads((output / "manifest.json").read_text())
+    unit = metadata.get("classification_score_unit")
+    if metadata.get("schema_version") == 2 and unit == "0_to_1":
+        legacy = False
+    elif (metadata.get("schema_version") in (None, 1) and unit in (None, "0_to_100")
+          and "batch_score_tolerance_0_to_100" in metadata):
+        legacy = True
+    else:
+        raise ValueError("Prediction cache score units are unknown or inconsistent")
+    records = []
+    for path in sorted((output / "cache").glob("*.json")):
+        row = json.loads(path.read_text())
+        if legacy:
+            if (row.get("schema_version") not in (None, 1) or
+                    row.get("classification_score_unit") not in (None, "0_to_100")):
+                raise ValueError("Legacy cache contains normalized scores; refusing double conversion")
+        elif row.get("schema_version") != 2 or row.get("classification_score_unit") != "0_to_1":
+            raise ValueError("Normalized cache record is missing its score unit")
+        for cells in row["variants"].values():
+            for cell in cells:
+                score = cell["score"]
+                if legacy:
+                    score = classification_score_from_percent(score)
+                if not np.isfinite(score) or not 0 <= score <= 1:
+                    raise ValueError("Invalid normalized classifier score")
+                cell["score"] = score
+        row.update(schema_version=2, classification_score_unit="0_to_1")
+        records.append(row)
+    return records
 
 
 def truth_boxes(image: Image.Image) -> list[list[int]]:
@@ -139,16 +173,16 @@ def classify_batches(engine: Engine, image: Image.Image, detections, batch_size=
     for offset in range(0, len(crops), batch_size):
         tensor = torch.stack([engine._transform(crop) for crop in crops[offset:offset + batch_size]]).to(engine.device)
         with torch.no_grad():
-            scores = (torch.softmax(engine._classifier(tensor), dim=-1)[:, 1] * 100).cpu().tolist()
+            scores = torch.softmax(engine._classifier(tensor), dim=-1)[:, 1].cpu().tolist()
         for cell, score in zip(cells[offset:offset + batch_size], scores):
-            if not np.isfinite(score) or not 0 <= score <= 100:
+            if not np.isfinite(score) or not 0 <= score <= 1:
                 raise ValueError("Invalid classifier score")
             cell["score"] = score
     if crops:
         # Real comparison with the app's single-cell path, per image/variant.
         difference = abs(engine._classify(crops[0]) - cells[0]["score"])
-        if difference > .001:
-            raise ValueError(f"Batch/single-cell score difference {difference} exceeds .001")
+        if difference > .00001:
+            raise ValueError(f"Batch/single-cell score difference {difference} exceeds .00001 (0–1)")
     return cells
 
 
@@ -169,7 +203,8 @@ def measure(args):
             truth_size = f.size
             boxes = truth_boxes(f)
         sx, sy = image.width / truth_size[0], image.height / truth_size[1]
-        pair.update(source_size=list(image.size), truth_size=list(truth_size),
+        pair.update(schema_version=2, classification_score_unit="0_to_1",
+                    source_size=list(image.size), truth_size=list(truth_size),
                     truth_boxes=[[b[0] * sx, b[1] * sy, b[2] * sx, b[3] * sy] for b in boxes],
                     source_sha256=file_sha256(Path(pair["source"])),
                     annotation_sha256=file_sha256(Path(pair["annotation"])), variants={})
@@ -182,15 +217,16 @@ def measure(args):
         pair["variants"]["native"] = classify_batches(engine, image, [(b, s) for b, s in zip(xyxy, confidence) if s >= .10])
         path.write_text(json.dumps(pair, ensure_ascii=False, allow_nan=False))
         print(f"{index}/{len(pairs)} {pair['machine']} {pair['image']} truth={len(boxes)}", flush=True)
-    (args.output / "manifest.json").write_text(json.dumps({"models": engine.get_model_metadata(), "missing": missing,
+    (args.output / "manifest.json").write_text(json.dumps({"schema_version": 2, "classification_score_unit": "0_to_1",
+        "models": engine.get_model_metadata(), "missing": missing,
         "matching_iou": .20, "annotation_convention": "exclusive right/bottom; scaled independently on x/y",
         "positive_truth_confirmed_by_user": True, "classifier_biology_independently_verified": False,
-        "batch_score_tolerance_0_to_100": .001, "minimum_cached_detection_confidence": .10}, ensure_ascii=False, indent=2))
+        "batch_score_tolerance_0_to_1": .00001, "minimum_cached_detection_confidence": .10}, ensure_ascii=False, indent=2))
     engine.close()
 
 
 def summarize(args):
-    records = [json.loads(path.read_text()) for path in sorted((args.output / "cache").glob("*.json"))]
+    records = load_cached_predictions(args.output)
     pairs, _ = discover(args.data_root)
     if {(r["machine"], r["image"]) for r in records} != {(r["machine"], r["image"]) for r in pairs}:
         raise ValueError("Incomplete inference cache; no accuracy result published")
@@ -206,14 +242,15 @@ def summarize(args):
                 detection_metric = aggregate(train, variant, detection, None)
                 if detection_metric["fn"] > baseline_detection["fn"]:
                     continue
-                for classification in (0., .01, .05, .1, .2, .5, 10., 20., 30., 40., 44., 50., 60., 70., 80., 90., 95., 97., 99., 99.5, 99.9):
+                for classification in (0., .0001, .0005, .001, .002, .005, .10, .20, .30, .40, .44, .50, .60, .70, .80, .90, .95, .97, .99, .995, .999):
                     metric = aggregate(train, variant, detection, classification)
                     if metric["fn"] > baseline["fn"] or metric["fp"] > baseline["fp"]:
                         continue
                     trials.append((metric["f1"], -metric["error"], metric["recall"], variant == "legacy640", detection, classification, variant, metric))
         best = max(trials)
         detection, classification, variant = best[4:7]
-        summary[machine] = {"selection": {"variant": variant, "detection_threshold": detection, "classification_threshold": classification},
+        summary[machine] = {"schema_version": 2, "classification_score_unit": "0_to_1",
+            "selection": {"variant": variant, "detection_threshold": detection, "classification_threshold": classification},
             "calibration_selected": best[7], "calibration_baseline": aggregate(train, "legacy640", .5, .5),
             "holdout_baseline": aggregate(test, "legacy640", .5, .5),
             "holdout_same_threshold_native": aggregate(test, "native", .5, .5),
@@ -231,6 +268,7 @@ def summarize(args):
                 cells = row["variants"][v]
                 metric = counts(cells, overlap_edges(cells, row["truth_boxes"]), len(row["truth_boxes"]), d, c)
                 image_rows.append(dict(machine=machine, image=row["image"], split=row["split"], condition=label,
+                                       classification_score_unit="0_to_1",
                                        variant=v, detection=d, classification=c, **metric))
     (args.output / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2))
     with (args.output / "per-image.csv").open("w", encoding="utf-8-sig", newline="") as f:

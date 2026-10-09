@@ -21,7 +21,7 @@ if str(ROOT) not in sys.path:
 
 from app.inference import Engine, crop_and_resize, file_sha256
 from app.calibration import score_features
-from scripts.evaluate_annotations import aggregate, overlap_edges
+from scripts.evaluate_annotations import aggregate, load_cached_predictions, overlap_edges
 
 
 def features(args, rows):
@@ -141,7 +141,13 @@ def main():
     parser.add_argument("--model-config", type=Path, default=ROOT / "config/models.local.json")
     args = parser.parse_args()
     (args.output / "features").mkdir(exist_ok=True)
-    rows = [json.loads(path.read_text()) for path in sorted((args.output / "cache").glob("*.json"))]
+    rows = load_cached_predictions(args.output)
+    # This offline tool's schema-1 artifacts remain explicitly 0–100.
+    # Convert at the boundary; no training algorithm or artifact is changed.
+    for row in rows:
+        for cells in row["variants"].values():
+            for cell in cells:
+                cell["score"] *= 100.
     if not rows or not (args.output / "manifest.json").exists():
         raise ValueError("Complete baseline measurement is required")
     features(args, rows)

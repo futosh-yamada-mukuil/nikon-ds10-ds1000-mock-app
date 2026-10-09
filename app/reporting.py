@@ -23,7 +23,7 @@ from .domain import FrameResult, InferenceSettings
 
 CANDIDATE_COLOR = "#ef4444"
 DETECTION_COLOR = "#8aa4bc"
-CSV_COLUMNS = ("cell_id", "x1", "y1", "x2", "y2", "detection_confidence", "class1_score", "candidate")
+CSV_COLUMNS = ("cell_id", "x1", "y1", "x2", "y2", "detection_confidence", "classification_score_0_to_1", "candidate")
 
 
 def render_result(
@@ -126,7 +126,7 @@ def _frame_record(index: int, result: FrameResult, settings: InferenceSettings) 
     if not math.isfinite(result.elapsed_seconds) or result.elapsed_seconds < 0:
         raise ValueError("処理時間が不正です。")
     for cell in result.cells:
-        if cell.score is not None and (not math.isfinite(cell.score) or not 0 <= cell.score <= 100):
+        if cell.score is not None and (not math.isfinite(cell.score) or not 0 <= cell.score <= 1):
             raise ValueError("分類スコアが不正です。")
         if cell.confidence is not None and (not math.isfinite(cell.confidence) or not 0 <= cell.confidence <= 1):
             raise ValueError("検出信頼度が不正です。")
@@ -187,7 +187,7 @@ def export_bundle(
     records = [_frame_record(index, frame_result, settings) for index, frame_result in frames]
     source_stat = source.stat()
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "source": {
             "path": str(source),
@@ -204,9 +204,11 @@ def export_bundle(
         "displayed_frame": displayed,
         "analyzed_frames": records,
         "classification": {
-            "score_definition": ("local frozen-feature linear head sigmoid multiplied by 100"
-                                 if settings.use_calibration else "softmax class index 1 probability multiplied by 100"),
-            "candidate_rule": "class1_score > classification_threshold (strict; unrounded)",
+            "score_unit": "0_to_1",
+            "threshold_unit": "0_to_1",
+            "score_definition": ("local frozen-feature linear head sigmoid"
+                                 if settings.use_calibration else "softmax class index 1 probability"),
+            "candidate_rule": "classification_score_0_to_1 > classification_threshold (strict; unrounded)",
             "class1_label_meaning": ("positive under supplied red annotations; unmarked ROIs assumed negative"
                                     if settings.use_calibration else "unverified"),
             "medical_interpretation": "not established; score is not a measured DFI percentage",

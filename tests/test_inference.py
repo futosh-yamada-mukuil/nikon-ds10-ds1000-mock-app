@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from PIL import Image
 
-from app.domain import CellResult, FrameResult, InferenceSettings
+from app.domain import CellResult, FrameResult, InferenceSettings, classification_score_from_percent
 from app.inference import (
     CLASSIFIER_SHA256, DETECTOR_SHA256, Engine, ModelError, build_classifier,
     choose_device, crop_and_resize, file_sha256, strip_state_dict_prefix, verify_model,
@@ -94,15 +94,15 @@ class InferenceBehaviorTests(unittest.TestCase):
 
     def test_threshold_equality_is_negative_and_original_precision_is_used(self):
         self.engine._detect = MagicMock(return_value=[((10, 10, 20, 20), 0.29), ((20, 20, 30, 30), 0.5)])
-        self.engine._classify = MagicMock(side_effect=[44.0, 44.00001])
-        result = self.engine.analyze(self.image, InferenceSettings(detection_threshold=.29, classification_threshold=44))
+        self.engine._classify = MagicMock(side_effect=[.44, .440000000001])
+        result = self.engine.analyze(self.image, InferenceSettings(detection_threshold=.29, classification_threshold=.44))
         self.assertEqual([cell.candidate for cell in result.cells], [False, True])
         self.assertEqual(result.candidate_count, 1)
         self.assertEqual(result.detection_count, 2)
 
     def test_invalid_crop_is_skipped_without_a_fake_classification(self):
         self.engine._detect = MagicMock(return_value=[((1, 1, 3, 3), 0.9), ((10, 10, 20, 20), 0.8)])
-        self.engine._classify = MagicMock(return_value=60.0)
+        self.engine._classify = MagicMock(return_value=.60)
         result = self.engine.analyze(self.image, InferenceSettings())
         self.assertEqual(result.skipped, 1)
         self.assertEqual(result.detection_count, 2)
@@ -119,7 +119,7 @@ class InferenceBehaviorTests(unittest.TestCase):
 
     def test_classification_only_uses_whole_image_and_no_detection_confidence(self):
         self.engine._detect = MagicMock()
-        self.engine._classify = MagicMock(return_value=50.0)
+        self.engine._classify = MagicMock(return_value=.50)
         result = self.engine.analyze(self.image, InferenceSettings(mode="classification_only"))
         self.assertEqual(result.cells[0].box, (0, 0, 100, 80))
         self.assertIsNone(result.cells[0].confidence)
@@ -134,6 +134,42 @@ class InferenceBehaviorTests(unittest.TestCase):
         self.engine._detect = MagicMock(side_effect=RuntimeError("backend failed"))
         with self.assertRaisesRegex(ModelError, "backend failed"):
             self.engine.analyze(self.image, InferenceSettings())
+
+    def test_probability_scale_and_candidate_boundary(self):
+        import math
+        import torch
+
+        self.engine._transform = lambda image: torch.zeros((3, 224, 224))
+        for probability in (.30, .44, .60):
+            self.engine._classifier = lambda tensor: torch.tensor(
+                [[math.log(1 - probability), math.log(probability)]], dtype=torch.float64)
+            with self.subTest(probability=probability):
+                self.assertAlmostEqual(self.engine._classify(self.image), probability, places=14)
+        self.engine._detect = MagicMock(return_value=[((10, 10, 20, 20), .5)] * 3)
+        self.engine._classify = MagicMock(side_effect=[.30, .44, .60])
+        result = self.engine.analyze(self.image, InferenceSettings(classification_threshold=.44))
+        self.assertEqual([cell.candidate for cell in result.cells], [False, False, True])
+
+    def test_nonfinite_model_score_is_rejected(self):
+        import torch
+
+        self.engine._transform = lambda image: torch.zeros((3, 224, 224))
+        self.engine._classifier = lambda tensor: torch.tensor([[float("nan"), 0.]])
+        with self.assertRaisesRegex(ModelError, "不正なスコア"):
+            self.engine._classify(self.image)
+
+    def test_explicit_percent_conversion_and_unit_interval_limits(self):
+        self.assertEqual(classification_score_from_percent(60.), .60)
+        # Small legacy values still mean percentages, never inferred probabilities.
+        self.assertEqual(classification_score_from_percent(.5), .005)
+        for value in (0., 1.):
+            self.assertEqual(InferenceSettings(classification_threshold=value).classification_threshold, value)
+        for value in (-.01, 1.01, 44., float("inf"), float("nan")):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                InferenceSettings(classification_threshold=value)
+        for value in (-1., 101., float("inf"), float("nan")):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                classification_score_from_percent(value)
 
     def test_crop_uses_exclusive_image_edges_and_clips_outside_boxes(self):
         crop, box = crop_and_resize(self.image, (110, 90, -10, -10))

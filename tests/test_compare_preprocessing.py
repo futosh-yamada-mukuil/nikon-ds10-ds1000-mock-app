@@ -29,9 +29,9 @@ class ComparePreprocessingTests(unittest.TestCase):
     def test_compare_roi_runs_both_real_preprocessing_paths_on_same_clipped_crop(self):
         image = Image.new("RGB", (12, 10), (180, 40, 90))
         engine = MagicMock()
-        engine._classify.side_effect = [10.0, 20.0]
+        engine._classify.side_effect = [.10, .20]
         direct, comparison, clipped = compare_roi(engine, image, (-2, 0, 5, 6), 83)
-        self.assertEqual((direct, comparison, clipped), (10.0, 20.0, (0, 0, 5, 6)))
+        self.assertEqual((direct, comparison, clipped), (.10, .20, (0, 0, 5, 6)))
         calls = [call.args[0] for call in engine._classify.call_args_list]
         self.assertEqual([im.size for im in calls], [(224, 224), (224, 224)])
         self.assertNotEqual(calls[0].tobytes(), calls[1].tobytes())
@@ -47,7 +47,7 @@ class ComparePreprocessingTests(unittest.TestCase):
         image.putdata([(x * 31 % 256, y * 47 % 256, (x + y) * 19 % 256)
                        for y in range(15) for x in range(19)])
         engine = MagicMock()
-        engine._classify.side_effect = [1., 2.]
+        engine._classify.side_effect = [.1, .2]
         compare_roi(engine, image, (1, 2, 17, 14), 83)
         buffer = BytesIO()
         image.crop((1, 2, 17, 14)).resize((640, 640), Image.Resampling.BILINEAR).save(buffer, "JPEG", quality=83)
@@ -71,7 +71,7 @@ class ComparePreprocessingTests(unittest.TestCase):
                                       detection_threshold=0.5)
             engine = MagicMock()
             engine.device = "cpu"
-            engine._classify.side_effect = [13.0, 31.0]
+            engine._classify.side_effect = [.13, .31]
             args.output_csv, args.output_json = output_csv, output_json
             rows, metadata = run(args, engine)
             write_outputs(output_csv, output_json, rows, metadata)
@@ -79,12 +79,15 @@ class ComparePreprocessingTests(unittest.TestCase):
                 written = list(csv.DictReader(stream))
             payload = json.loads(output_json.read_text())
             self.assertEqual(rows[0]["cell_id"], "cell-A")
-            self.assertEqual(rows[0]["score_difference_comparison_minus_direct"], 18.0)
+            self.assertAlmostEqual(rows[0]["score_difference_comparison_minus_direct"], .18)
             self.assertEqual(written[0]["cell_id"], "cell-A")
-            self.assertEqual(float(written[0]["score_difference_comparison_minus_direct"]), 18.0)
+            self.assertAlmostEqual(float(written[0]["score_difference_comparison_minus_direct"]), .18)
             self.assertEqual(payload["metadata"]["rows_written"], 1)
             self.assertEqual(payload["results"], rows)
             self.assertEqual(metadata["jpeg_quality"], 82)
+            self.assertEqual(metadata["schema_version"], 2)
+            self.assertEqual(metadata["classification_score_unit"], "0_to_1")
+            self.assertEqual(written[0]["direct_224_classification_score_0_to_1"], "0.13")
             self.assertEqual(metadata["training_time_jpeg_quality"], "unverified")
             self.assertTrue(metadata["same_roi_for_both_paths"])
 

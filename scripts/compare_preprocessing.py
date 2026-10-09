@@ -72,6 +72,8 @@ def compare_roi(engine: Engine, image: Image.Image, box: Iterable[int], jpeg_qua
 
 
 def run(args: argparse.Namespace, engine: Engine) -> tuple[list[dict], dict]:
+    InferenceSettings(detection_threshold=args.detection_threshold,
+                      classification_threshold=args.classification_threshold)
     rows = read_rois(args.input_csv)
     outputs = []
     image_cache: dict[Path, Image.Image] = {}
@@ -87,20 +89,22 @@ def run(args: argparse.Namespace, engine: Engine) -> tuple[list[dict], dict]:
         outputs.append({
             "image": row["image"], "cell_id": row["cell_id"],
             "x1": clipped[0], "y1": clipped[1], "x2": clipped[2], "y2": clipped[3],
-            "direct_224_class1_score": direct,
-            "jpeg_640_then_224_class1_score": comparison,
+            "direct_224_classification_score_0_to_1": direct,
+            "jpeg_640_then_224_classification_score_0_to_1": comparison,
             "score_difference_comparison_minus_direct": comparison - direct,
             "classification_threshold": args.classification_threshold,
             "direct_candidate": direct > args.classification_threshold,
             "comparison_candidate": comparison > args.classification_threshold,
         })
     metadata = {
+        "schema_version": 2,
+        "classification_score_unit": "0_to_1",
         "input_csv": str(args.input_csv.resolve()),
         "image_root": str(input_root),
         "classifier_model": str(args.classifier.resolve()),
         "device_requested": args.device,
         "device_used": engine.device,
-        "classification_threshold_score_0_to_100": args.classification_threshold,
+        "classification_threshold_score_0_to_1": args.classification_threshold,
         "detection_threshold": args.detection_threshold,
         "same_roi_for_both_paths": True,
         "paths": {
@@ -109,7 +113,7 @@ def run(args: argparse.Namespace, engine: Engine) -> tuple[list[dict], dict]:
         },
         "jpeg_quality": args.jpeg_quality,
         "training_time_jpeg_quality": "unverified",
-        "scores": "softmax class 1 multiplied by 100; class mapping independently unverified",
+        "scores": "softmax class 1 probability (0–1); class mapping independently unverified",
         "detection_threshold_applied": False,
         "labels_created": False,
         "model_predictions_measured": True,
@@ -140,12 +144,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto")
     parser.add_argument("--jpeg-quality", type=int, choices=range(1, 96), required=True)
     parser.add_argument("--classification-threshold", type=float, default=0.5,
-                        help="class 1 score threshold on 0-100 scale (default: 0.5)")
+                        help="class 1 score threshold on 0-1 scale (default: 0.5 = 50%)")
     parser.add_argument("--detection-threshold", type=float, default=0.5,
                         help="recorded reference setting; no detector is run")
     args = parser.parse_args(argv)
-    if not 0 <= args.classification_threshold <= 100:
-        parser.error("--classification-threshold は0〜100です。")
+    if not 0 <= args.classification_threshold <= 1:
+        parser.error("--classification-threshold は0〜1です。")
     if not 0 <= args.detection_threshold <= 1:
         parser.error("--detection-threshold は0〜1です。")
     if not args.classifier.is_file():

@@ -8,6 +8,13 @@ import math
 MODES = ("detection_classification", "detection_only", "classification_only")
 
 
+def classification_score_from_percent(value: float) -> float:
+    """Convert an explicitly legacy 0–100 score; never infer units from values."""
+    if not math.isfinite(value) or not 0 <= value <= 100:
+        raise ValueError("旧形式の分類スコアは0〜100で指定してください。")
+    return value / 100.0
+
+
 @dataclass(frozen=True)
 class InferenceSettings:
     detection_threshold: float = 0.5
@@ -19,8 +26,8 @@ class InferenceSettings:
     def __post_init__(self) -> None:
         if not math.isfinite(self.detection_threshold) or not 0 <= self.detection_threshold <= 1:
             raise ValueError("検出しきい値は0〜1で指定してください。")
-        if not math.isfinite(self.classification_threshold) or not 0 <= self.classification_threshold <= 100:
-            raise ValueError("分類しきい値は0〜100で指定してください。")
+        if not math.isfinite(self.classification_threshold) or not 0 <= self.classification_threshold <= 1:
+            raise ValueError("分類しきい値は0〜1で指定してください。")
         if self.machine not in ("DS10", "DS1000"):
             raise ValueError("機種はDS10またはDS1000を指定してください。")
         if self.mode not in MODES:
@@ -35,7 +42,7 @@ class CellResult:
     id: int
     box: tuple[int, int, int, int]
     confidence: float | None
-    score: float | None
+    score: float | None  # Normalized classification score in [0, 1], or unclassified.
     candidate: bool
 
 

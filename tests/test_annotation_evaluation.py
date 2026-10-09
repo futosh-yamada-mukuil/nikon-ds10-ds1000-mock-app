@@ -1,13 +1,53 @@
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
 from PIL import Image, ImageDraw
 
-from scripts.evaluate_annotations import counts, discover, overlap_edges, truth_boxes
+from scripts.evaluate_annotations import counts, discover, load_cached_predictions, overlap_edges, truth_boxes
 
 
 class AnnotationEvaluationTests(unittest.TestCase):
+    def test_cache_units_are_explicit_and_legacy_conversion_never_changes_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "cache").mkdir()
+            path = root / "cache/sample.json"
+            legacy = {"variants": {"legacy640": [{"score": 60.}, {"score": .5}]}}
+            path.write_text(json.dumps(legacy))
+            original = path.read_bytes()
+            (root / "manifest.json").write_text(json.dumps({"batch_score_tolerance_0_to_100": .001}))
+            rows = load_cached_predictions(root)
+            self.assertEqual([c["score"] for c in rows[0]["variants"]["legacy640"]], [.60, .005])
+            self.assertEqual(path.read_bytes(), original)
+            (root / "manifest.json").write_text(json.dumps({"schema_version": 2, "classification_score_unit": "0_to_1"}))
+            path.write_text(json.dumps(rows[0]))
+            normalized = path.read_bytes()
+            for _ in range(2):
+                self.assertEqual(load_cached_predictions(root), rows)
+            self.assertEqual(path.read_bytes(), normalized)
+
+    def test_unknown_mixed_and_invalid_cache_units_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "cache").mkdir()
+            manifest = root / "manifest.json"
+            path = root / "cache/sample.json"
+            manifest.write_text("{}")
+            with self.assertRaisesRegex(ValueError, "unknown"):
+                load_cached_predictions(root)
+            manifest.write_text(json.dumps({"batch_score_tolerance_0_to_100": .001}))
+            path.write_text(json.dumps({"schema_version": 2, "classification_score_unit": "0_to_1", "variants": {}}))
+            with self.assertRaisesRegex(ValueError, "double conversion"):
+                load_cached_predictions(root)
+            manifest.write_text(json.dumps({"schema_version": 2, "classification_score_unit": "0_to_1"}))
+            for score in (60., float("nan"), float("inf"), -.1):
+                path.write_text(json.dumps({"schema_version": 2, "classification_score_unit": "0_to_1",
+                                           "variants": {"legacy640": [{"score": score}]}}))
+                with self.subTest(score=score), self.assertRaisesRegex(ValueError, "Invalid"):
+                    load_cached_predictions(root)
+
     def test_red_box_edges_are_exclusive_and_green_cells_are_not_labels(self):
         image = Image.new("RGB", (50, 40), (0, 100, 0))
         ImageDraw.Draw(image).rectangle((10, 8, 30, 28), outline="red", width=2)

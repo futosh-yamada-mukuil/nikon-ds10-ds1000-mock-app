@@ -191,8 +191,8 @@ class Engine:
             output = self._classifier(tensor)
             if output.ndim != 2 or output.shape != (1, 2):
                 raise ModelError("分類モデルの出力形状が一致しません。")
-            score = float(torch.softmax(output, dim=-1)[0, 1].item() * 100.0)
-        if not math.isfinite(score) or not 0 <= score <= 100:
+            score = float(torch.softmax(output, dim=-1)[0, 1].item())
+        if not math.isfinite(score) or not 0 <= score <= 1:
             raise ModelError("分類モデルから不正なスコアが返されました。")
         return score
 
@@ -200,6 +200,7 @@ class Engine:
         import numpy as np
         import torch
         from .calibration import score_features
+        from .domain import classification_score_from_percent
 
         if not self.calibration or machine not in self.calibration["machines"]:
             raise ModelError("この機種の検証済み分類補正がありません。")
@@ -216,7 +217,8 @@ class Engine:
         score = float(score_features(captured[0], self.calibration["machines"][machine])[0])
         if not math.isfinite(score) or not 0 <= score <= 100:
             raise ModelError("分類補正のスコアが不正です。")
-        return score
+        # The pinned schema-1 calibration artifact and score_features remain 0–100.
+        return classification_score_from_percent(score)
 
     def _detect(self, image: Image.Image, threshold: float):
         import cv2
@@ -296,10 +298,12 @@ class Engine:
             "device": self.device, "loaded": self.loaded,
             "preprocessing": {"detector_long_side": 640, "crop_size": [224, 224],
                               "crop_padding_ratio": 0.0, "mean": IMAGENET_MEAN, "std": IMAGENET_STD},
-            "classification_score": "softmax class 1 × 100; class meaning not independently verified",
+            "classification_score": "softmax class 1 probability (0–1); class meaning not independently verified",
+            "classification_score_unit": "0_to_1",
             "calibration": {"available": self.calibration is not None,
                             "sha256": CALIBRATION_SHA256 if self.calibration else None,
-                            "score_definition": "local frozen-feature linear head sigmoid × 100 when use_calibration=true",
+                            "score_definition": "local frozen-feature linear head sigmoid (0–1) when use_calibration=true",
+                            "artifact_score_unit": "0_to_100",
                             "training_membership": "unknown for original model; local head fitted on calibration split only"},
         }
 

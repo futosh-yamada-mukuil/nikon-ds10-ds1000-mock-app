@@ -60,12 +60,14 @@ class CalibrationTests(unittest.TestCase):
         engine._transform = lambda image: torch.zeros((3, 224, 224))
         engine.calibration = fixture()
         score = engine._classify_calibrated(Image.new("RGB", (224, 224)), "DS1000")
-        self.assertAlmostEqual(score, float(score_features(np.zeros((1, 128)), fixture()["machines"]["DS1000"])[0]))
+        legacy_score = float(score_features(np.zeros((1, 128)), fixture()["machines"]["DS1000"])[0])
+        self.assertAlmostEqual(score, legacy_score / 100.)
+        self.assertEqual(score > .60, legacy_score > 60.)
         self.assertEqual(len(engine._classifier.fc[5]._forward_pre_hooks), 0)
         self.assertTrue(torch.equal(before, engine._classifier.fc[5].weight))
         engine.loaded = True
         engine._detect = MagicMock(return_value=[((0, 0, 8, 8), .5)])
-        result = engine.analyze(Image.new("RGB", (12, 12)), InferenceSettings(machine="DS1000", use_calibration=True, classification_threshold=60.))
+        result = engine.analyze(Image.new("RGB", (12, 12)), InferenceSettings(machine="DS1000", use_calibration=True, classification_threshold=.60))
         self.assertTrue(result.cells[0].candidate)
 
     def test_local_fit_requires_both_labels_and_leaves_features_unchanged(self):

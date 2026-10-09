@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from .domain import InferenceSettings
+from .domain import InferenceSettings, classification_score_from_percent
 from .downloads import CsvDownload
 from .media import MediaSource
 from .reporting import CANDIDATE_COLOR, export_bundle, render_result
@@ -232,12 +232,13 @@ class MainWindow(QMainWindow):
         self.det_threshold.setValue(.5)
         setting_form.addRow("検出しきい値", self.det_threshold)
         self.class_threshold = QDoubleSpinBox()
-        self.class_threshold.setRange(0, 100)
+        self.class_threshold.setRange(0, 1)
         self.class_threshold.setDecimals(2)
         self.class_threshold.setSingleStep(.01)
         self.class_threshold.setValue(.5)
+        self.class_threshold.setToolTip("0〜1の尺度です。0.50 = 50%相当、0.44 = 44%相当。医学的DFI値ではありません。")
         setting_form.addRow("分類しきい値", self.class_threshold)
-        self.threshold_note = QLabel("赤枠 = class1スコアが分類しきい値を超過\n設定変更は次回の解析に適用されます\n学習ラベルの意味は確認待ちです")
+        self.threshold_note = QLabel("分類スコア・しきい値は0〜1（0.50 = 50%相当）\n赤枠 = class1スコアがしきい値を超過\n設定変更は次回の解析に適用 · 学習ラベルは確認待ち")
         self.threshold_note.setWordWrap(True)
         self.threshold_note.setStyleSheet("color: #6b7c8f; font-size: 11px;")
         setting_form.addRow(self.threshold_note)
@@ -411,7 +412,7 @@ class MainWindow(QMainWindow):
             getattr(self, f"{name}_count").setText("—" if count is None else f"{count:,}")
             getattr(self, f"{name}_unit").setVisible(count is not None)
         self.detection_note.setText("分類のみのため、物体検知は行いません" if settings.mode == "classification_only" else f"検出しきい値 {settings.detection_threshold:.2f} 以上")
-        self.candidate_note.setText("物体検知のみのため、分類は行いません" if settings.mode == "detection_only" else f"分類スコアが {settings.classification_threshold:.2f} を超えた数 · 赤枠で表示")
+        self.candidate_note.setText("物体検知のみのため、分類は行いません" if settings.mode == "detection_only" else f"分類スコア（0〜1）が {settings.classification_threshold:.2f}（{settings.classification_threshold * 100:g}%相当）を超えた数 · 赤枠で表示")
         self.result_state.setText({"waiting": "解析待ち", "analyzing": "解析中", "completed": "解析完了", "paused": "一時停止", "stopping": "停止処理中", "stopped": "停止", "error": "解析エラー"}[state])
         if self.result is None:
             context = "結果はまだありません。画像・動画を選び、「処理開始」を押してください。"
@@ -571,13 +572,13 @@ class MainWindow(QMainWindow):
                 return
             head = data["machines"]["DS1000"]
             self.det_threshold.setValue(head["detection_threshold"])
-            self.class_threshold.setValue(head["classification_threshold"])
-            self.threshold_note.setText("赤枠 = 補正後の陽性スコアが分類しきい値を超過\nDS1000の正解画像を使った分類補正\n別の画像での精度は未確認です")
+            self.class_threshold.setValue(classification_score_from_percent(head["classification_threshold"]))
+            self.threshold_note.setText("補正スコア・しきい値は0〜1\n赤枠 = 補正後スコアがしきい値を超過\nDS1000の正解画像を使った補正 · 別画像の精度は未確認")
             self.calibration_button.setText("DS1000改善設定を使用中（押すと標準）")
         else:
             self.det_threshold.setValue(.5)
             self.class_threshold.setValue(.5)
-            self.threshold_note.setText("赤枠 = class1スコアが分類しきい値を超過\n設定変更は次回の解析に適用されます\n学習ラベルの意味は確認待ちです")
+            self.threshold_note.setText("分類スコア・しきい値は0〜1（0.50 = 50%相当）\n赤枠 = class1スコアがしきい値を超過\n設定変更は次回の解析に適用 · 学習ラベルは確認待ち")
             self.calibration_button.setText("DS1000の改善設定を適用")
         self.refresh_pending_counts()
 
