@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from .domain import InferenceSettings, classification_score_from_percent
+from .domain import InferenceSettings
 from .downloads import CsvDownload
 from .media import MediaSource
 from .reporting import CANDIDATE_COLOR, export_bundle, render_result
@@ -194,16 +194,13 @@ class MainWindow(QMainWindow):
         self.machine.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.machine.setMinimumWidth(160)
         self.machine.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        form.addRow("機種", self.machine)
+        form.addRow("画質", self.machine)
         self.stride = QSpinBox()
         self.stride.setRange(1, 1000)
         self.stride.setValue(10)
         self.stride.setSuffix(" フレームごと")
         form.addRow("動画の解析間隔", self.stride)
         source_layout.addLayout(form)
-        source_note = QLabel("画像・動画ファイル対応\nカメラ / DLL / SAM連携は次の開発範囲")
-        source_note.setStyleSheet("color: #617488; font-size: 11px;")
-        source_layout.addWidget(source_note)
         left.addWidget(source_group)
         controls = QGroupBox("処理操作")
         control_layout = QVBoxLayout(controls)
@@ -223,7 +220,6 @@ class MainWindow(QMainWindow):
         self.mode = QComboBox()
         self.mode.addItem("物体検知 + 細胞分類", "detection_classification")
         self.mode.addItem("物体検知のみ", "detection_only")
-        self.mode.addItem("細胞分類のみ（画像全体）", "classification_only")
         setting_form.addRow("モード", self.mode)
         self.det_threshold = QDoubleSpinBox()
         self.det_threshold.setRange(0, 1)
@@ -238,16 +234,10 @@ class MainWindow(QMainWindow):
         self.class_threshold.setValue(.5)
         self.class_threshold.setToolTip("0〜1の尺度です。0.50 = 50%相当、0.44 = 44%相当。医学的DFI値ではありません。")
         setting_form.addRow("分類しきい値", self.class_threshold)
-        self.threshold_note = QLabel("分類スコア・しきい値は0〜1（0.50 = 50%相当）\n赤枠 = class1スコアがしきい値を超過\n設定変更は次回の解析に適用 · 学習ラベルは確認待ち")
+        self.threshold_note = QLabel("分類スコア・しきい値は0〜1（0.50 = 50%相当）\n赤枠 = class1スコアがしきい値を超過")
         self.threshold_note.setWordWrap(True)
         self.threshold_note.setStyleSheet("color: #6b7c8f; font-size: 11px;")
         setting_form.addRow(self.threshold_note)
-        self.calibration_button = QPushButton("DS1000の改善設定を適用")
-        self.calibration_button.setCheckable(True)
-        self.calibration_button.setEnabled(False)
-        self.calibration_button.setToolTip("DS1000の正解画像で学習した分類補正です。比較用56枚で誤検出と見逃しが減少しました。初期設定の0.5／0.5には適用されません。")
-        self.calibration_button.toggled.connect(self.toggle_calibration)
-        setting_form.addRow(self.calibration_button)
         left.addWidget(setting_group)
         self.export_button = QPushButton("検索結果CSVをダウンロード")
         self.export_button.clicked.connect(self.save_results)
@@ -343,8 +333,6 @@ class MainWindow(QMainWindow):
         self.mode.currentIndexChanged.connect(self.refresh_pending_counts)
         self.det_threshold.valueChanged.connect(self.refresh_pending_counts)
         self.class_threshold.valueChanged.connect(self.refresh_pending_counts)
-        self.machine.currentIndexChanged.connect(self.sync_calibration_controls)
-        self.mode.currentIndexChanged.connect(self.sync_calibration_controls)
         self.update_result_counts()
         self.statusBar().showMessage("ファイル入力モック · 推論前の件数は未測定")
 
@@ -554,33 +542,7 @@ class MainWindow(QMainWindow):
         self.message(f"ファイル読み込み: {self.source_path.name}")
 
     def current_settings(self):
-        return InferenceSettings(detection_threshold=self.det_threshold.value(), classification_threshold=self.class_threshold.value(), machine=self.machine.currentText(), mode=self.mode.currentData(), use_calibration=self.calibration_button.isChecked())
-
-    def sync_calibration_controls(self):
-        data = getattr(self.engine, "calibration", None)
-        available = bool(data and "DS1000" in data["machines"] and self.machine.currentText() == "DS1000"
-                         and self.mode.currentData() == "detection_classification")
-        if not available and self.calibration_button.isChecked():
-            self.calibration_button.setChecked(False)
-        self.calibration_button.setEnabled(available and not self.loader and not self.worker)
-
-    def toggle_calibration(self, enabled):
-        if enabled:
-            data = getattr(self.engine, "calibration", None)
-            if not data or self.machine.currentText() != "DS1000" or self.mode.currentData() != "detection_classification":
-                self.calibration_button.setChecked(False)
-                return
-            head = data["machines"]["DS1000"]
-            self.det_threshold.setValue(head["detection_threshold"])
-            self.class_threshold.setValue(classification_score_from_percent(head["classification_threshold"]))
-            self.threshold_note.setText("補正スコア・しきい値は0〜1\n赤枠 = 補正後スコアがしきい値を超過\nDS1000の正解画像を使った補正 · 別画像の精度は未確認")
-            self.calibration_button.setText("DS1000改善設定を使用中（押すと標準）")
-        else:
-            self.det_threshold.setValue(.5)
-            self.class_threshold.setValue(.5)
-            self.threshold_note.setText("分類スコア・しきい値は0〜1（0.50 = 50%相当）\n赤枠 = class1スコアがしきい値を超過\n設定変更は次回の解析に適用 · 学習ラベルは確認待ち")
-            self.calibration_button.setText("DS1000の改善設定を適用")
-        self.refresh_pending_counts()
+        return InferenceSettings(detection_threshold=self.det_threshold.value(), classification_threshold=self.class_threshold.value(), machine=self.machine.currentText(), mode=self.mode.currentData())
 
     def start_analysis(self):
         if not self.engine or not self.media or self.worker or self.loader:
@@ -686,7 +648,6 @@ class MainWindow(QMainWindow):
         for control in (self.machine, self.stride, self.mode, self.det_threshold, self.class_threshold, self.detector_path, self.classifier_path, self.save_config_button, *self.model_path_buttons):
             control.setEnabled(not busy)
         self.start_button.setEnabled(not busy and self.engine is not None and self.media is not None)
-        self.sync_calibration_controls()
         self.pause_button.setEnabled(self.worker is not None)
         self.stop_button.setEnabled(self.worker is not None)
         self.export_button.setEnabled(not busy and self.result is not None)

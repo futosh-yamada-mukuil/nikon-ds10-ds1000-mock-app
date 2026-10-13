@@ -71,6 +71,7 @@ class ComparePreprocessingTests(unittest.TestCase):
                                       detection_threshold=0.5)
             engine = MagicMock()
             engine.device = "cpu"
+            engine._hashes = {"classifier": "a" * 64}
             engine._classify.side_effect = [.13, .31]
             args.output_csv, args.output_json = output_csv, output_json
             rows, metadata = run(args, engine)

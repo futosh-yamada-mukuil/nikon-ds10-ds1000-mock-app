@@ -119,20 +119,19 @@ class UserFlowTests(unittest.TestCase):
         self.assertIn("0.44", self.window.candidate_note.text())
         self.assertIn("44%", self.window.candidate_note.text())
 
-    def test_ds1000_improvement_is_opt_in_and_resets_when_machine_changes(self):
+    def test_quality_selection_preserves_thresholds_without_enabling_calibration(self):
         engine = FakeEngine()
         engine.calibration = {"machines": {"DS1000": {"detection_threshold": .5, "classification_threshold": 60.}}}
         self.prepare(engine)
-        self.assertEqual(self.window.current_settings().classification_threshold, .5)
-        self.assertFalse(self.window.calibration_button.isEnabled())
-        self.window.machine.setCurrentText("DS1000")
-        self.assertTrue(self.window.calibration_button.isEnabled())
-        self.window.calibration_button.click()
-        self.assertTrue(self.window.current_settings().use_calibration)
-        self.assertEqual(self.window.current_settings().classification_threshold, .60)
-        self.window.machine.setCurrentText("DS10")
-        self.assertFalse(self.window.current_settings().use_calibration)
-        self.assertEqual(self.window.current_settings().classification_threshold, .5)
+        self.window.det_threshold.setValue(.26)
+        self.window.class_threshold.setValue(.39)
+        for quality in ("DS1000", "DS10"):
+            self.window.machine.setCurrentText(quality)
+            settings = self.window.current_settings()
+            self.assertEqual(settings.machine, quality)
+            self.assertFalse(settings.use_calibration)
+            self.assertEqual(settings.detection_threshold, .26)
+            self.assertEqual(settings.classification_threshold, .39)
 
     def test_image_run_snapshots_settings_and_disables_mutating_controls(self):
         engine = FakeEngine(block=True)
